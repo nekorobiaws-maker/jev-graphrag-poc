@@ -15,7 +15,9 @@
 - 既にある関数はコードだけ更新し、設定は変えない(query の `AWS_DATA_PATH` だけは無ければ足す)
 - API キーの値は表示しない。create-api は URL とキーを `.api.local.json`(権限 600)に書く
 - `--region` で東京以外(us-west-2)に query Lambda とテーブルだけを置ける(SSM と API Gateway は東京だけ)
-- us-west-2 は計測用。東京のデータを写すスクリプトは同梱していない(テーブルは空で作られる)"""
+- us-west-2 は計測用。東京のデータを写すスクリプトは同梱していない(テーブルは空で作られる)
+- ap-northeast-3(大阪)は CDK(`infra/cdk/`)で一式を置く。このスクリプトは大阪では status(読むだけ)しか
+  受け付けない。消すのは `npx aws-cdk@2 destroy -c region=ap-northeast-3`"""
 
 from __future__ import annotations
 
@@ -119,6 +121,9 @@ LAMBDA_SPECS: dict[str, dict[str, Any]] = {
 REMOTE_LAMBDAS: tuple[str, ...] = ("query",)
 SECRET_REGION_ENV = "SECRET_REGION"       # lib/aws_secrets.py と同じ名前
 REMOTE_COMMANDS: tuple[str, ...] = ("create-tables", "deploy-lambdas", "status", "teardown")
+# CDK で一式を管理するリージョン。作る・消すは CDK に任せ、ここでは status(読むだけ)だけ通す
+CDK_ONLY_REGIONS: tuple[str, ...] = ("ap-northeast-3",)
+CDK_ONLY_COMMANDS: tuple[str, ...] = ("status",)
 
 
 def lambda_spec(key: str, region: str = REGION) -> dict:
@@ -750,7 +755,10 @@ def _try(fn: Callable[[], Any]) -> tuple[Any, str | None]:
 
 
 def run_status(aws: Aws) -> int:
-    if not aws.is_home:
+    if aws.region in CDK_ONLY_REGIONS:
+        print(f"リージョン {aws.region}(CDK のスタック。SSM は東京を読むだけ、API Gateway は見ません。"
+              f"IAM は東京の {LAMBDA_ROLE} を見ます。スタックのロールは {LAMBDA_ROLE}-{aws.region})")
+    elif not aws.is_home:
         print(f"リージョン {aws.region}(本手法の query の写し。SSM は東京を読むだけ、API Gateway は見ません)")
     print("[DynamoDB]")
     for name in TEARDOWN_TABLES:
@@ -1077,6 +1085,11 @@ def main(argv: Sequence[str] | None = None, *, session: Any = None,
          sleep_fn: Callable[[float], None] = time.sleep) -> int:
     args = build_parser().parse_args(argv)
     region = args.region or REGION
+    if region in CDK_ONLY_REGIONS and args.command not in CDK_ONLY_COMMANDS:
+        # AWS を呼ぶ前に止める(大阪は CDK のスタック。作る・消すは cdk deploy / cdk destroy で)
+        print(f"!! {region} は CDK で管理します。このスクリプトで使えるのは {', '.join(CDK_ONLY_COMMANDS)} だけです"
+              f"(指定: {args.command})。消すときは npx aws-cdk@2 destroy -c region={region}")
+        return EXIT_FAILED
     if region != HOME_REGION and args.command not in REMOTE_COMMANDS:
         # AWS を呼ぶ前に止める(SSM と API Gateway は東京にだけ置く)
         print(f"!! {args.command} は {HOME_REGION} だけです(指定: {region})。"

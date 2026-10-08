@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     import boto3
 
     session = boto3.Session(region_name=REGION)
-    require_home_region(__file__.rsplit('/', 1)[-1])  # 東京専用(JEV_REGION が東京以外なら止める)
+    require_home_region(__file__.rsplit('/', 1)[-1])  # 東京・大阪専用(JEV_REGION がそれ以外なら止める)
     check_account(session)                      # JEV_AWS_ACCOUNT_ID と違えばここで例外
 
     from graph_store import GraphStore

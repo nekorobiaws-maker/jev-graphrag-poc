@@ -54,10 +54,13 @@ def dataset_paths(name: str | None = None) -> tuple[Path, Path]:
 DATASET = dataset_name()
 
 # ============================================================== 環境
-# 既定は東京。us-west-2 は query Lambda の写しを置くときだけ使う(環境変数 JEV_REGION)。
+# 既定は東京。ap-northeast-3(大阪)は一式(登録・検索・API)を CDK で置いて検証するときに使う。
+# us-west-2 は query Lambda の写しを置くときだけ使う(東京のデータを写して測る前提)。切り替えは環境変数 JEV_REGION。
 
 HOME_REGION = "ap-northeast-1"
-REGIONS: tuple[str, ...] = (HOME_REGION, "us-west-2")
+REGIONS: tuple[str, ...] = (HOME_REGION, "us-west-2", "ap-northeast-3")
+# 登録(20 番)とマスター投入(60 番)を走らせてよいリージョン(us-west-2 は写し専用なので含めない)
+INGEST_REGIONS: tuple[str, ...] = (HOME_REGION, "ap-northeast-3")
 REGION_ENV = "JEV_REGION"
 
 
@@ -209,9 +212,9 @@ def check_account(session: Any = None, region: str | None = None) -> str:
 
 
 def require_home_region(label: str = "") -> None:
-    """東京(HOME_REGION)専用のスクリプト(登録・マスター)の最初に呼ぶ。`JEV_REGION` が東京以外なら止める。"""
-    if REGION != HOME_REGION:
-        raise RuntimeError(f"{label + ': ' if label else ''}このスクリプトは {HOME_REGION} 専用です"
+    """登録・マスター投入のスクリプトの最初に呼ぶ。`JEV_REGION` が `INGEST_REGIONS`(東京・大阪)以外なら止める。"""
+    if REGION not in INGEST_REGIONS:
+        raise RuntimeError(f"{label + ': ' if label else ''}このスクリプトは {', '.join(INGEST_REGIONS)} 専用です"
                            f"({REGION_ENV}={REGION})")
 
 
