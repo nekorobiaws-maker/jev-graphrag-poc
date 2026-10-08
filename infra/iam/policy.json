@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:ap-northeast-1:<ACCOUNT_ID>:log-group:/aws/lambda/jev-graphrag-*:*"
+    },
+    {
+      "Sid": "DynamoDB",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem", "dynamodb:BatchWriteItem", "dynamodb:DeleteItem",
+        "dynamodb:Query", "dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:ap-northeast-1:<ACCOUNT_ID>:table/jev-graphrag-chunk",
+        "arn:aws:dynamodb:ap-northeast-1:<ACCOUNT_ID>:table/jev-graphrag-graph"
+      ]
+    },
+    {
+      "Sid": "ApiKey",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/jev-graphrag-poc/typesafe-api-key"
+    },
+    {
+      "Sid": "Bedrock",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": [
+        "arn:aws:bedrock:ap-northeast-1:<ACCOUNT_ID>:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
+      ]
+    }
+  ]
+}

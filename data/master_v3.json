@@ -1,0 +1,1952 @@
+{
+  "node_types": [
+    {
+      "name": "作品",
+      "description": "漫画・アニメなどの作品"
+    },
+    {
+      "name": "作者",
+      "description": "作品の原作者"
+    },
+    {
+      "name": "企業",
+      "description": "出版社・制作会社"
+    },
+    {
+      "name": "媒体",
+      "description": "掲載誌・放送局"
+    },
+    {
+      "name": "キャラクター",
+      "description": "作中の人物・妖精"
+    },
+    {
+      "name": "組織",
+      "description": "海賊団・探偵事務所・敵組織など"
+    },
+    {
+      "name": "アイテム",
+      "description": "道具・薬・宝など"
+    },
+    {
+      "name": "能力",
+      "description": "特殊な力"
+    },
+    {
+      "name": "場所",
+      "description": "作中の地名・海域"
+    }
+  ],
+  "edge_types": [
+    {
+      "name": "作者である",
+      "template": "{source} は {target} の作者である",
+      "allowed": [
+        {
+          "source_type": "作者",
+          "target_type": "作品"
+        }
+      ]
+    },
+    {
+      "name": "制作する",
+      "template": "{source} は {target} を制作している、または制作していた",
+      "allowed": [
+        {
+          "source_type": "企業",
+          "target_type": "作品"
+        }
+      ]
+    },
+    {
+      "name": "発行する",
+      "template": "{source} は {target} を発行している、または発行していた",
+      "allowed": [
+        {
+          "source_type": "企業",
+          "target_type": "媒体"
+        }
+      ]
+    },
+    {
+      "name": "掲載・放送される",
+      "template": "{source} は {target} で連載・放送されている、またはされていた",
+      "allowed": [
+        {
+          "source_type": "作品",
+          "target_type": "媒体"
+        }
+      ]
+    },
+    {
+      "name": "舞台とする",
+      "template": "{source} の舞台は {target} である",
+      "allowed": [
+        {
+          "source_type": "作品",
+          "target_type": "場所"
+        }
+      ]
+    },
+    {
+      "name": "コラボする",
+      "template": "{source} と {target} はコラボレーションしている、またはしたことがある",
+      "symmetric": true,
+      "allowed": [
+        {
+          "source_type": "作品",
+          "target_type": "作品"
+        }
+      ]
+    },
+    {
+      "name": "登場する",
+      "template": "{source} は {target} に登場する、または登場した",
+      "allowed": [
+        {
+          "source_type": "キャラクター",
+          "target_type": "作品"
+        },
+        {
+          "source_type": "組織",
+          "target_type": "作品"
+        }
+      ]
+    },
+    {
+      "name": "間柄がある",
+      "symmetric": true,
+      "template": "{source} と {target} には間柄がある（家族・幼なじみ・仲間・師弟・敵対・同一人物の別の姿・大切な物を託した など。いまのことでも、過去のことでもよい）",
+      "allowed": [
+        {
+          "source_type": "キャラクター",
+          "target_type": "キャラクター"
+        }
+      ]
+    },
+    {
+      "name": "組織と関わる",
+      "template": "{source} は {target} と関わりがある（所属・在籍・指揮・敵対・拠点にする など。いまのことでも、過去のことでもよい）",
+      "allowed": [
+        {
+          "source_type": "キャラクター",
+          "target_type": "組織"
+        }
+      ]
+    },
+    {
+      "name": "組織どうし関わる",
+      "symmetric": true,
+      "template": "{source} と {target} には関わりがある（敵対・同盟・協力・傘下 など。いまのことでも、過去のことでもよい）",
+      "allowed": [
+        {
+          "source_type": "組織",
+          "target_type": "組織"
+        }
+      ]
+    },
+    {
+      "name": "物・力と関わる",
+      "template": "{source} は {target} と関わりがある（持つ・使う・作る・発明する・それによって姿が変わった・狙う・その能力を持つ など。いまのことでも、過去のことでもよい）",
+      "allowed": [
+        {
+          "source_type": "キャラクター",
+          "target_type": "アイテム"
+        },
+        {
+          "source_type": "キャラクター",
+          "target_type": "能力"
+        },
+        {
+          "source_type": "組織",
+          "target_type": "アイテム"
+        }
+      ]
+    },
+    {
+      "name": "場所と関わる",
+      "template": "{source} は {target} とゆかりがある（出身・住んでいる・拠点にする・目的地にする など。いまのことでも、過去のことでもよい）",
+      "allowed": [
+        {
+          "source_type": "キャラクター",
+          "target_type": "場所"
+        },
+        {
+          "source_type": "組織",
+          "target_type": "場所"
+        }
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "id": "one-piece",
+      "name": "ONE PIECE",
+      "aliases": [
+        "ワンピース",
+        "ONE PIECE（漫画）"
+      ],
+      "type": "作品",
+      "description": "尾田栄一郎の海賊漫画"
+    },
+    {
+      "id": "detective-conan",
+      "name": "名探偵コナン",
+      "aliases": [
+        "コナン（作品）"
+      ],
+      "type": "作品",
+      "description": "青山剛昌の推理漫画"
+    },
+    {
+      "id": "tantei-precure",
+      "name": "名探偵プリキュア!",
+      "aliases": [
+        "たんプリ",
+        "名探偵プリキュア"
+      ],
+      "type": "作品",
+      "description": "プリキュアシリーズ第23作"
+    },
+    {
+      "id": "oda",
+      "name": "尾田栄一郎",
+      "aliases": [],
+      "type": "作者",
+      "description": "ONE PIECE の作者"
+    },
+    {
+      "id": "aoyama",
+      "name": "青山剛昌",
+      "aliases": [],
+      "type": "作者",
+      "description": "名探偵コナンの作者"
+    },
+    {
+      "id": "shueisha",
+      "name": "集英社",
+      "aliases": [],
+      "type": "企業",
+      "description": "出版社"
+    },
+    {
+      "id": "shogakukan",
+      "name": "小学館",
+      "aliases": [],
+      "type": "企業",
+      "description": "出版社"
+    },
+    {
+      "id": "toei-animation",
+      "name": "東映アニメーション",
+      "aliases": [
+        "東映"
+      ],
+      "type": "企業",
+      "description": "アニメ制作会社"
+    },
+    {
+      "id": "jump",
+      "name": "週刊少年ジャンプ",
+      "aliases": [
+        "ジャンプ"
+      ],
+      "type": "媒体",
+      "description": "集英社の漫画雑誌"
+    },
+    {
+      "id": "sunday",
+      "name": "週刊少年サンデー",
+      "aliases": [
+        "サンデー"
+      ],
+      "type": "媒体",
+      "description": "小学館の漫画雑誌"
+    },
+    {
+      "id": "abc-tvasahi",
+      "name": "ABCテレビ・テレビ朝日系",
+      "aliases": [
+        "テレ朝",
+        "ABCテレビ・テレビ朝日系列",
+        "テレビ朝日"
+      ],
+      "type": "媒体",
+      "description": "放送局"
+    },
+    {
+      "id": "luffy",
+      "name": "モンキー・D・ルフィ",
+      "aliases": [
+        "ルフィ",
+        "麦わらのルフィ"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の船長"
+    },
+    {
+      "id": "shanks",
+      "name": "シャンクス",
+      "aliases": [
+        "赤髪のシャンクス"
+      ],
+      "type": "キャラクター",
+      "description": "ルフィに麦わら帽子を託した海賊"
+    },
+    {
+      "id": "roger",
+      "name": "ゴール・D・ロジャー",
+      "aliases": [
+        "海賊王",
+        "ロジャー"
+      ],
+      "type": "キャラクター",
+      "description": "ひとつなぎの大秘宝を遺したとされる海賊王"
+    },
+    {
+      "id": "zoro",
+      "name": "ロロノア・ゾロ",
+      "aliases": [
+        "ゾロ",
+        "海賊狩りのゾロ"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の剣士"
+    },
+    {
+      "id": "nami",
+      "name": "ナミ",
+      "aliases": [
+        "泥棒猫"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の航海士"
+    },
+    {
+      "id": "usopp",
+      "name": "ウソップ",
+      "aliases": [
+        "ゴッド・ウソップ"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の狙撃手"
+    },
+    {
+      "id": "sanji",
+      "name": "サンジ",
+      "aliases": [
+        "黒足のサンジ",
+        "ヴィンスモーク・サンジ"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味のコック"
+    },
+    {
+      "id": "chopper",
+      "name": "トニートニー・チョッパー",
+      "aliases": [
+        "チョッパー",
+        "わたあめ大好きチョッパー"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の船医"
+    },
+    {
+      "id": "garp",
+      "name": "モンキー・D・ガープ",
+      "aliases": [
+        "ガープ",
+        "海軍の英雄"
+      ],
+      "type": "キャラクター",
+      "description": "海軍中将。ルフィの祖父"
+    },
+    {
+      "id": "strawhat-pirates",
+      "name": "麦わらの一味",
+      "aliases": [
+        "麦わら海賊団"
+      ],
+      "type": "組織",
+      "description": "ルフィが船長の海賊団"
+    },
+    {
+      "id": "navy",
+      "name": "海軍",
+      "aliases": [
+        "海軍本部"
+      ],
+      "type": "組織",
+      "description": "世界の秩序を守る組織"
+    },
+    {
+      "id": "strawhat",
+      "name": "麦わら帽子",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "シャンクスがルフィに託した帽子"
+    },
+    {
+      "id": "one-piece-treasure",
+      "name": "ひとつなぎの大秘宝",
+      "aliases": [
+        "ワンピース（秘宝）"
+      ],
+      "type": "アイテム",
+      "description": "海賊王が遺したとされる宝"
+    },
+    {
+      "id": "gomu-gomu",
+      "name": "ゴムゴムの実",
+      "aliases": [
+        "悪魔の実",
+        "ヒトヒトの実幻獣種モデル“ニカ”",
+        "ニカ"
+      ],
+      "type": "能力",
+      "description": "食べると体がゴムのように伸びる"
+    },
+    {
+      "id": "grand-line",
+      "name": "偉大なる航路",
+      "aliases": [
+        "グランドライン"
+      ],
+      "type": "場所",
+      "description": "海賊が目指す海域"
+    },
+    {
+      "id": "shinichi",
+      "name": "工藤新一",
+      "aliases": [
+        "新一",
+        "東の高校生探偵"
+      ],
+      "type": "キャラクター",
+      "description": "高校生探偵"
+    },
+    {
+      "id": "conan",
+      "name": "江戸川コナン",
+      "aliases": [
+        "コナン",
+        "クールガイ"
+      ],
+      "type": "キャラクター",
+      "description": "子どもの姿になった工藤新一"
+    },
+    {
+      "id": "ran",
+      "name": "毛利蘭",
+      "aliases": [
+        "蘭",
+        "エンジェル"
+      ],
+      "type": "キャラクター",
+      "description": "新一の幼なじみ"
+    },
+    {
+      "id": "kogoro",
+      "name": "毛利小五郎",
+      "aliases": [
+        "小五郎",
+        "眠りの小五郎",
+        "毛利のおじさん",
+        "おっちゃん",
+        "毛利君"
+      ],
+      "type": "キャラクター",
+      "description": "蘭の父。毛利探偵事務所を営む"
+    },
+    {
+      "id": "agasa",
+      "name": "阿笠博士",
+      "aliases": [
+        "博士"
+      ],
+      "type": "キャラクター",
+      "description": "発明家。コナンを支える隣人"
+    },
+    {
+      "id": "haibara",
+      "name": "灰原哀",
+      "aliases": [
+        "シェリー",
+        "灰原"
+      ],
+      "type": "キャラクター",
+      "description": "元・黒ずくめの組織の科学者"
+    },
+    {
+      "id": "gin",
+      "name": "ジン",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "黒ずくめの組織のメンバー"
+    },
+    {
+      "id": "kid",
+      "name": "怪盗キッド",
+      "aliases": [
+        "キッド",
+        "怪盗1412号"
+      ],
+      "type": "キャラクター",
+      "description": "宝石を狙う怪盗"
+    },
+    {
+      "id": "black-org",
+      "name": "黒ずくめの組織",
+      "aliases": [
+        "組織",
+        "黒の組織"
+      ],
+      "type": "組織",
+      "description": "謎の犯罪組織"
+    },
+    {
+      "id": "mouri-agency",
+      "name": "毛利探偵事務所",
+      "aliases": [],
+      "type": "組織",
+      "description": "毛利小五郎の探偵事務所"
+    },
+    {
+      "id": "aptx4869",
+      "name": "APTX4869",
+      "aliases": [
+        "毒薬"
+      ],
+      "type": "アイテム",
+      "description": "体を子どもの姿に縮める薬"
+    },
+    {
+      "id": "voice-changer",
+      "name": "蝶ネクタイ型変声機",
+      "aliases": [
+        "変声機"
+      ],
+      "type": "アイテム",
+      "description": "阿笠博士の発明品"
+    },
+    {
+      "id": "tranq-watch",
+      "name": "腕時計型麻酔銃",
+      "aliases": [
+        "麻酔銃"
+      ],
+      "type": "アイテム",
+      "description": "阿笠博士の発明品"
+    },
+    {
+      "id": "anna",
+      "name": "明智あんな",
+      "aliases": [
+        "あんな"
+      ],
+      "type": "キャラクター",
+      "description": "2027年から来た中学2年生"
+    },
+    {
+      "id": "cure-answer",
+      "name": "キュアアンサー",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "明智あんなが変身したプリキュア"
+    },
+    {
+      "id": "mikuru",
+      "name": "小林みくる",
+      "aliases": [
+        "みくる"
+      ],
+      "type": "キャラクター",
+      "description": "名探偵に憧れる少女"
+    },
+    {
+      "id": "pochitan",
+      "name": "ポチタン",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "あんなの前に現れた妖精"
+    },
+    {
+      "id": "jet",
+      "name": "ジェット先輩",
+      "aliases": [
+        "ジェット"
+      ],
+      "type": "キャラクター",
+      "description": "プリキットを発明する自称天才博士"
+    },
+    {
+      "id": "ruruka",
+      "name": "森亜るるか",
+      "aliases": [
+        "るるか"
+      ],
+      "type": "キャラクター",
+      "description": "怪盗団ファントムの一員"
+    },
+    {
+      "id": "cure-eclair",
+      "name": "キュアエクレール",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "正体不明のプリキュア"
+    },
+    {
+      "id": "cuet-agency",
+      "name": "キュアット探偵事務所",
+      "aliases": [],
+      "type": "組織",
+      "description": "あんなとみくるが暮らす探偵事務所"
+    },
+    {
+      "id": "phantom",
+      "name": "怪盗団ファントム",
+      "aliases": [
+        "ファントム"
+      ],
+      "type": "組織",
+      "description": "大切なものを盗もうとする怪盗団"
+    },
+    {
+      "id": "prikit",
+      "name": "プリキット",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "プリキュアをサポートする道具"
+    },
+    {
+      "id": "pendant",
+      "name": "ペンダント",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "あんなをタイムスリップに導いた"
+    },
+    {
+      "id": "makoto-mirai",
+      "name": "まことみらい市",
+      "aliases": [],
+      "type": "場所",
+      "description": "1999年の舞台となる街"
+    },
+    {
+      "id": "robin",
+      "name": "ニコ・ロビン",
+      "aliases": [
+        "ロビン",
+        "ミス・オールサンデー",
+        "悪魔の子"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の考古学者"
+    },
+    {
+      "id": "franky",
+      "name": "フランキー",
+      "aliases": [
+        "鉄人フランキー",
+        "鉄人（サイボーグ）フランキー"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の船大工でサイボーグ"
+    },
+    {
+      "id": "brook",
+      "name": "ブルック",
+      "aliases": [
+        "鼻唄のブルック"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の音楽家。骸骨の剣士"
+    },
+    {
+      "id": "jinbe",
+      "name": "ジンベエ",
+      "aliases": [
+        "海侠のジンベエ"
+      ],
+      "type": "キャラクター",
+      "description": "麦わらの一味の操舵手。ジンベエザメの魚人"
+    },
+    {
+      "id": "sogeking",
+      "name": "そげキング",
+      "aliases": [
+        "狙撃の王"
+      ],
+      "type": "キャラクター",
+      "description": "ウソップが仮面をつけて名乗った別人格"
+    },
+    {
+      "id": "yasopp",
+      "name": "ヤソップ",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "赤髪海賊団の狙撃手。ウソップの父"
+    },
+    {
+      "id": "tom",
+      "name": "トム",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "ウォーターセブンの伝説的な船大工。フランキーの師匠"
+    },
+    {
+      "id": "mihawk",
+      "name": "ジュラキュール・ミホーク",
+      "aliases": [
+        "ミホーク",
+        "鷹の目",
+        "鷹の目のミホーク"
+      ],
+      "type": "キャラクター",
+      "description": "世界最強の剣士。元・王下七武海"
+    },
+    {
+      "id": "arlong",
+      "name": "アーロン",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "東の海でココヤシ村を支配した魚人の海賊"
+    },
+    {
+      "id": "zeff",
+      "name": "ゼフ",
+      "aliases": [
+        "赫足のゼフ"
+      ],
+      "type": "キャラクター",
+      "description": "海上レストラン・バラティエのオーナー。サンジの恩人"
+    },
+    {
+      "id": "pudding",
+      "name": "シャーロット・プリン",
+      "aliases": [
+        "プリン"
+      ],
+      "type": "キャラクター",
+      "description": "ビッグ・マムの娘。サンジとの政略結婚の相手"
+    },
+    {
+      "id": "big-mom",
+      "name": "シャーロット・リンリン",
+      "aliases": [
+        "ビッグ・マム"
+      ],
+      "type": "キャラクター",
+      "description": "四皇の一人。ビッグ・マム海賊団の船長"
+    },
+    {
+      "id": "rayleigh",
+      "name": "シルバーズ・レイリー",
+      "aliases": [
+        "レイリー",
+        "冥王"
+      ],
+      "type": "キャラクター",
+      "description": "元ロジャー海賊団の副船長。ルフィに覇気を教えた"
+    },
+    {
+      "id": "kizaru",
+      "name": "黄猿",
+      "aliases": [
+        "ボルサリーノ"
+      ],
+      "type": "キャラクター",
+      "description": "ピカピカの実の能力者の海軍大将"
+    },
+    {
+      "id": "kuma",
+      "name": "バーソロミュー・くま",
+      "aliases": [
+        "くま"
+      ],
+      "type": "キャラクター",
+      "description": "元・王下七武海で革命軍幹部。ニキュニキュの実の能力者"
+    },
+    {
+      "id": "vegapunk",
+      "name": "ベガパンク",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "世界政府に仕える天才科学者"
+    },
+    {
+      "id": "smoker",
+      "name": "スモーカー",
+      "aliases": [
+        "白猟のスモーカー"
+      ],
+      "type": "キャラクター",
+      "description": "モクモクの実の能力者の海兵"
+    },
+    {
+      "id": "koby",
+      "name": "コビー",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "ルフィに励まされて海軍に入った少年"
+    },
+    {
+      "id": "ace",
+      "name": "ポートガス・D・エース",
+      "aliases": [
+        "エース",
+        "火拳のエース",
+        "火拳"
+      ],
+      "type": "キャラクター",
+      "description": "白ひげ海賊団二番隊隊長。ルフィの義兄"
+    },
+    {
+      "id": "sabo",
+      "name": "サボ",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "革命軍の参謀総長。ルフィとエースの義兄弟"
+    },
+    {
+      "id": "dragon",
+      "name": "モンキー・D・ドラゴン",
+      "aliases": [
+        "ドラゴン"
+      ],
+      "type": "キャラクター",
+      "description": "革命軍の総司令官。ルフィの父"
+    },
+    {
+      "id": "ivankov",
+      "name": "エンポリオ・イワンコフ",
+      "aliases": [
+        "イワンコフ"
+      ],
+      "type": "キャラクター",
+      "description": "革命軍の幹部。カマバッカ王国の女王"
+    },
+    {
+      "id": "whitebeard",
+      "name": "エドワード・ニューゲート",
+      "aliases": [
+        "白ひげ"
+      ],
+      "type": "キャラクター",
+      "description": "四皇の一人。白ひげ海賊団の船長"
+    },
+    {
+      "id": "marco",
+      "name": "マルコ",
+      "aliases": [
+        "不死鳥マルコ"
+      ],
+      "type": "キャラクター",
+      "description": "白ひげ海賊団一番隊隊長"
+    },
+    {
+      "id": "blackbeard",
+      "name": "マーシャル・D・ティーチ",
+      "aliases": [
+        "黒ひげ",
+        "ティーチ"
+      ],
+      "type": "キャラクター",
+      "description": "黒ひげ海賊団の船長。四皇の一人"
+    },
+    {
+      "id": "akainu",
+      "name": "赤犬",
+      "aliases": [
+        "サカズキ"
+      ],
+      "type": "キャラクター",
+      "description": "マグマグの実の能力者。のちの海軍元帥"
+    },
+    {
+      "id": "sengoku",
+      "name": "センゴク",
+      "aliases": [
+        "仏のセンゴク"
+      ],
+      "type": "キャラクター",
+      "description": "頂上戦争当時の海軍元帥"
+    },
+    {
+      "id": "law",
+      "name": "トラファルガー・ロー",
+      "aliases": [
+        "ロー",
+        "死の外科医"
+      ],
+      "type": "キャラクター",
+      "description": "ハートの海賊団の船長。オペオペの実の能力者"
+    },
+    {
+      "id": "crocodile",
+      "name": "クロコダイル",
+      "aliases": [
+        "Mr.0"
+      ],
+      "type": "キャラクター",
+      "description": "バロックワークスの社長。元・王下七武海"
+    },
+    {
+      "id": "vivi",
+      "name": "ネフェルタリ・ビビ",
+      "aliases": [
+        "ビビ",
+        "ミス・ウェンズデー"
+      ],
+      "type": "キャラクター",
+      "description": "アラバスタ王国の王女"
+    },
+    {
+      "id": "hancock",
+      "name": "ボア・ハンコック",
+      "aliases": [
+        "ハンコック",
+        "海賊女帝"
+      ],
+      "type": "キャラクター",
+      "description": "アマゾン・リリーの皇帝。元・王下七武海"
+    },
+    {
+      "id": "doflamingo",
+      "name": "ドンキホーテ・ドフラミンゴ",
+      "aliases": [
+        "ドフラミンゴ"
+      ],
+      "type": "キャラクター",
+      "description": "ドレスローザの国王。元・王下七武海"
+    },
+    {
+      "id": "eustass-kid",
+      "name": "ユースタス・キッド",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "キッド海賊団の船長。最悪の世代の一人"
+    },
+    {
+      "id": "kaido",
+      "name": "カイドウ",
+      "aliases": [
+        "百獣のカイドウ"
+      ],
+      "type": "キャラクター",
+      "description": "百獣海賊団の総督。四皇の一人"
+    },
+    {
+      "id": "orochi",
+      "name": "黒炭オロチ",
+      "aliases": [
+        "オロチ"
+      ],
+      "type": "キャラクター",
+      "description": "カイドウと組んでワノ国を支配した将軍"
+    },
+    {
+      "id": "oden",
+      "name": "光月おでん",
+      "aliases": [
+        "おでん"
+      ],
+      "type": "キャラクター",
+      "description": "ワノ国九里の侍。元ロジャー海賊団"
+    },
+    {
+      "id": "momonosuke",
+      "name": "光月モモの助",
+      "aliases": [
+        "モモの助"
+      ],
+      "type": "キャラクター",
+      "description": "おでんの息子。ワノ国の新たな将軍"
+    },
+    {
+      "id": "buggy",
+      "name": "バギー",
+      "aliases": [
+        "道化のバギー"
+      ],
+      "type": "キャラクター",
+      "description": "クロスギルドの表向きのトップ。四皇の一人"
+    },
+    {
+      "id": "red-hair-pirates",
+      "name": "赤髪海賊団",
+      "aliases": [],
+      "type": "組織",
+      "description": "シャンクスが率いる海賊団"
+    },
+    {
+      "id": "roger-pirates",
+      "name": "ロジャー海賊団",
+      "aliases": [],
+      "type": "組織",
+      "description": "ゴール・D・ロジャーが率いた海賊団"
+    },
+    {
+      "id": "whitebeard-pirates",
+      "name": "白ひげ海賊団",
+      "aliases": [],
+      "type": "組織",
+      "description": "白ひげが率いた海賊団"
+    },
+    {
+      "id": "blackbeard-pirates",
+      "name": "黒ひげ海賊団",
+      "aliases": [],
+      "type": "組織",
+      "description": "黒ひげが率いる海賊団"
+    },
+    {
+      "id": "baroque-works",
+      "name": "バロックワークス",
+      "aliases": [],
+      "type": "組織",
+      "description": "クロコダイルが社長の秘密犯罪会社"
+    },
+    {
+      "id": "world-government",
+      "name": "世界政府",
+      "aliases": [],
+      "type": "組織",
+      "description": "多くの国が加盟する巨大な組織"
+    },
+    {
+      "id": "cp9",
+      "name": "CP9",
+      "aliases": [],
+      "type": "組織",
+      "description": "世界政府の諜報機関"
+    },
+    {
+      "id": "revolutionary-army",
+      "name": "革命軍",
+      "aliases": [],
+      "type": "組織",
+      "description": "世界政府の打倒を目指す組織"
+    },
+    {
+      "id": "shichibukai",
+      "name": "王下七武海",
+      "aliases": [
+        "七武海"
+      ],
+      "type": "組織",
+      "description": "世界政府公認の七人の海賊の制度"
+    },
+    {
+      "id": "yonko",
+      "name": "四皇",
+      "aliases": [],
+      "type": "組織",
+      "description": "新世界に君臨する四人の大海賊の呼び名"
+    },
+    {
+      "id": "worst-generation",
+      "name": "最悪の世代",
+      "aliases": [],
+      "type": "組織",
+      "description": "ルフィと同時期に頭角を現した若い海賊たちの呼び名"
+    },
+    {
+      "id": "akazaya",
+      "name": "赤鞘九人男",
+      "aliases": [],
+      "type": "組織",
+      "description": "光月おでんに仕えた九人の侍"
+    },
+    {
+      "id": "cross-guild",
+      "name": "クロスギルド",
+      "aliases": [],
+      "type": "組織",
+      "description": "バギー・クロコダイル・ミホークが立ち上げた組織"
+    },
+    {
+      "id": "celestial-dragons",
+      "name": "天竜人",
+      "aliases": [],
+      "type": "組織",
+      "description": "世界政府を創った王たちの末裔の特権階級"
+    },
+    {
+      "id": "going-merry",
+      "name": "ゴーイングメリー号",
+      "aliases": [
+        "メリー号"
+      ],
+      "type": "アイテム",
+      "description": "麦わらの一味の最初の船"
+    },
+    {
+      "id": "thousand-sunny",
+      "name": "サウザンド・サニー号",
+      "aliases": [
+        "サニー号"
+      ],
+      "type": "アイテム",
+      "description": "フランキーが造った麦わらの一味の二代目の船"
+    },
+    {
+      "id": "clima-tact",
+      "name": "天候棒",
+      "aliases": [
+        "クリマ・タクト"
+      ],
+      "type": "アイテム",
+      "description": "ナミが使う天候を操る棒"
+    },
+    {
+      "id": "poneglyph",
+      "name": "歴史の本文",
+      "aliases": [
+        "ポーネグリフ"
+      ],
+      "type": "アイテム",
+      "description": "過去を記した石碑"
+    },
+    {
+      "id": "pluton",
+      "name": "プルトン",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "古代兵器の一つ"
+    },
+    {
+      "id": "poseidon",
+      "name": "ポセイドン",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "古代兵器の一つ"
+    },
+    {
+      "id": "devil-fruit",
+      "name": "悪魔の実",
+      "aliases": [],
+      "type": "能力",
+      "description": "食べると特殊な能力を得る果実の総称"
+    },
+    {
+      "id": "hito-hito",
+      "name": "ヒトヒトの実",
+      "aliases": [],
+      "type": "能力",
+      "description": "チョッパーが食べた動物系の悪魔の実"
+    },
+    {
+      "id": "mera-mera",
+      "name": "メラメラの実",
+      "aliases": [],
+      "type": "能力",
+      "description": "全身を炎に変える悪魔の実"
+    },
+    {
+      "id": "hana-hana",
+      "name": "ハナハナの実",
+      "aliases": [],
+      "type": "能力",
+      "description": "体の一部を咲かせる悪魔の実"
+    },
+    {
+      "id": "ope-ope",
+      "name": "オペオペの実",
+      "aliases": [],
+      "type": "能力",
+      "description": "ローが持つ悪魔の実"
+    },
+    {
+      "id": "haki",
+      "name": "覇気",
+      "aliases": [
+        "見聞色",
+        "武装色",
+        "覇王色"
+      ],
+      "type": "能力",
+      "description": "全ての人間に潜在する力"
+    },
+    {
+      "id": "gear5",
+      "name": "ギア5",
+      "aliases": [],
+      "type": "能力",
+      "description": "ルフィがニカの力を目覚めさせた姿"
+    },
+    {
+      "id": "east-blue",
+      "name": "東の海",
+      "aliases": [
+        "イーストブルー"
+      ],
+      "type": "場所",
+      "description": "ルフィやゾロ、ナミの故郷がある海"
+    },
+    {
+      "id": "dawn-island",
+      "name": "ドーン島",
+      "aliases": [],
+      "type": "場所",
+      "description": "ルフィが育った島"
+    },
+    {
+      "id": "syrup-village",
+      "name": "シロップ村",
+      "aliases": [],
+      "type": "場所",
+      "description": "ウソップの故郷"
+    },
+    {
+      "id": "baratie",
+      "name": "バラティエ",
+      "aliases": [],
+      "type": "場所",
+      "description": "東の海の海上レストラン"
+    },
+    {
+      "id": "water-seven",
+      "name": "ウォーターセブン",
+      "aliases": [],
+      "type": "場所",
+      "description": "船大工の島"
+    },
+    {
+      "id": "enies-lobby",
+      "name": "エニエス・ロビー",
+      "aliases": [],
+      "type": "場所",
+      "description": "世界政府の司法の島"
+    },
+    {
+      "id": "fishman-island",
+      "name": "魚人島",
+      "aliases": [],
+      "type": "場所",
+      "description": "海底一万メートルにある島"
+    },
+    {
+      "id": "sabaody",
+      "name": "シャボンディ諸島",
+      "aliases": [],
+      "type": "場所",
+      "description": "麦わらの一味が再会した諸島"
+    },
+    {
+      "id": "loguetown",
+      "name": "ローグタウン",
+      "aliases": [
+        "始まりと終わりの町"
+      ],
+      "type": "場所",
+      "description": "ロジャーが生まれ処刑された東の海の町"
+    },
+    {
+      "id": "laugh-tale",
+      "name": "ラフテル",
+      "aliases": [],
+      "type": "場所",
+      "description": "偉大なる航路の最果ての島"
+    },
+    {
+      "id": "all-blue",
+      "name": "オールブルー",
+      "aliases": [],
+      "type": "場所",
+      "description": "東西南北の海の魚がすむ伝説の海"
+    },
+    {
+      "id": "alabasta",
+      "name": "アラバスタ王国",
+      "aliases": [
+        "アラバスタ"
+      ],
+      "type": "場所",
+      "description": "ビビが王女を務める砂漠の国"
+    },
+    {
+      "id": "impel-down",
+      "name": "インペルダウン",
+      "aliases": [
+        "大監獄インペルダウン"
+      ],
+      "type": "場所",
+      "description": "世界政府が管理する海底の監獄"
+    },
+    {
+      "id": "dressrosa",
+      "name": "ドレスローザ",
+      "aliases": [],
+      "type": "場所",
+      "description": "ドフラミンゴが国王だった国"
+    },
+    {
+      "id": "punk-hazard",
+      "name": "パンクハザード",
+      "aliases": [],
+      "type": "場所",
+      "description": "ルフィとローが同盟を結んだ島"
+    },
+    {
+      "id": "wano",
+      "name": "ワノ国",
+      "aliases": [],
+      "type": "場所",
+      "description": "カイドウとオロチが支配していた国"
+    },
+    {
+      "id": "onigashima",
+      "name": "鬼ヶ島",
+      "aliases": [],
+      "type": "場所",
+      "description": "ワノ国でカイドウとの決戦が行われた島"
+    },
+    {
+      "id": "new-world",
+      "name": "新世界",
+      "aliases": [],
+      "type": "場所",
+      "description": "偉大なる航路の後半の海"
+    },
+    {
+      "id": "mary-geoise",
+      "name": "聖地マリージョア",
+      "aliases": [
+        "マリージョア"
+      ],
+      "type": "場所",
+      "description": "レッドラインの上にある天竜人の居住地"
+    },
+    {
+      "id": "egghead",
+      "name": "エッグヘッド",
+      "aliases": [
+        "未来島エッグヘッド"
+      ],
+      "type": "場所",
+      "description": "ベガパンクの研究所がある未来島"
+    },
+    {
+      "id": "fuji-tv",
+      "name": "フジテレビ系列",
+      "aliases": [
+        "フジテレビ"
+      ],
+      "type": "媒体",
+      "description": "アニメONE PIECEの放送局"
+    },
+    {
+      "id": "yusaku",
+      "name": "工藤優作",
+      "aliases": [
+        "優作"
+      ],
+      "type": "キャラクター",
+      "description": "世界的な推理小説家。新一の父"
+    },
+    {
+      "id": "yukiko",
+      "name": "工藤有希子",
+      "aliases": [
+        "有希子",
+        "江戸川文代"
+      ],
+      "type": "キャラクター",
+      "description": "元人気女優。新一の母"
+    },
+    {
+      "id": "toichi",
+      "name": "黒羽盗一",
+      "aliases": [
+        "初代怪盗キッド"
+      ],
+      "type": "キャラクター",
+      "description": "天才マジシャン。初代の怪盗キッド"
+    },
+    {
+      "id": "kaito",
+      "name": "黒羽快斗",
+      "aliases": [
+        "快斗"
+      ],
+      "type": "キャラクター",
+      "description": "江古田高校の高校生。二代目の怪盗キッド"
+    },
+    {
+      "id": "vermouth",
+      "name": "ベルモット",
+      "aliases": [
+        "シャロン・ヴィンヤード",
+        "クリス・ヴィンヤード"
+      ],
+      "type": "キャラクター",
+      "description": "黒ずくめの組織の変装の名人"
+    },
+    {
+      "id": "vodka",
+      "name": "ウォッカ",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "黒ずくめの組織のメンバー。ジンの相棒"
+    },
+    {
+      "id": "sonoko",
+      "name": "鈴木園子",
+      "aliases": [
+        "園子",
+        "眠りの園子"
+      ],
+      "type": "キャラクター",
+      "description": "鈴木財閥の令嬢。蘭の親友"
+    },
+    {
+      "id": "eri",
+      "name": "妃英理",
+      "aliases": [
+        "法曹界のクイーン"
+      ],
+      "type": "キャラクター",
+      "description": "敏腕弁護士。蘭の母"
+    },
+    {
+      "id": "megure",
+      "name": "目暮十三",
+      "aliases": [
+        "目暮警部",
+        "目暮"
+      ],
+      "type": "キャラクター",
+      "description": "警視庁捜査一課の警部"
+    },
+    {
+      "id": "ayumi",
+      "name": "吉田歩美",
+      "aliases": [
+        "歩美"
+      ],
+      "type": "キャラクター",
+      "description": "少年探偵団のメンバー"
+    },
+    {
+      "id": "mitsuhiko",
+      "name": "円谷光彦",
+      "aliases": [
+        "光彦"
+      ],
+      "type": "キャラクター",
+      "description": "少年探偵団のメンバー"
+    },
+    {
+      "id": "genta",
+      "name": "小嶋元太",
+      "aliases": [
+        "元太"
+      ],
+      "type": "キャラクター",
+      "description": "少年探偵団のメンバー"
+    },
+    {
+      "id": "kobayashi-sumiko",
+      "name": "小林澄子",
+      "aliases": [
+        "小林先生"
+      ],
+      "type": "キャラクター",
+      "description": "帝丹小学校1年B組の担任"
+    },
+    {
+      "id": "shiho",
+      "name": "宮野志保",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "灰原哀の本名。元・組織の科学者"
+    },
+    {
+      "id": "akemi",
+      "name": "宮野明美",
+      "aliases": [
+        "広田雅美"
+      ],
+      "type": "キャラクター",
+      "description": "灰原哀の姉"
+    },
+    {
+      "id": "akai",
+      "name": "赤井秀一",
+      "aliases": [
+        "ライ",
+        "諸星大"
+      ],
+      "type": "キャラクター",
+      "description": "FBIの捜査官で凄腕の狙撃手"
+    },
+    {
+      "id": "okiya",
+      "name": "沖矢昴",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "東都大学の大学院生を名乗る男"
+    },
+    {
+      "id": "kir",
+      "name": "水無怜奈",
+      "aliases": [
+        "キール",
+        "本堂瑛海"
+      ],
+      "type": "キャラクター",
+      "description": "テレビ局のアナウンサー。組織のキールでCIAの諜報員"
+    },
+    {
+      "id": "amuro",
+      "name": "安室透",
+      "aliases": [
+        "バーボン"
+      ],
+      "type": "キャラクター",
+      "description": "私立探偵で喫茶ポアロの店員。組織ではバーボン"
+    },
+    {
+      "id": "furuya",
+      "name": "降谷零",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "警察庁の公安警察官"
+    },
+    {
+      "id": "kazami",
+      "name": "風見裕也",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "警視庁公安部の刑事。降谷の部下"
+    },
+    {
+      "id": "hiromitsu",
+      "name": "諸伏景光",
+      "aliases": [
+        "スコッチ"
+      ],
+      "type": "キャラクター",
+      "description": "組織に潜入していた公安警察官"
+    },
+    {
+      "id": "matsuda",
+      "name": "松田陣平",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "殉職した警視庁の爆発物処理の刑事"
+    },
+    {
+      "id": "hagiwara",
+      "name": "萩原研二",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "殉職した爆発物処理班の警察官"
+    },
+    {
+      "id": "date",
+      "name": "伊達航",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "殉職した警視庁捜査一課の刑事"
+    },
+    {
+      "id": "takagi",
+      "name": "高木渉",
+      "aliases": [
+        "高木"
+      ],
+      "type": "キャラクター",
+      "description": "警視庁捜査一課の刑事"
+    },
+    {
+      "id": "sato",
+      "name": "佐藤美和子",
+      "aliases": [
+        "佐藤"
+      ],
+      "type": "キャラクター",
+      "description": "警視庁捜査一課の女性刑事"
+    },
+    {
+      "id": "shiratori",
+      "name": "白鳥任三郎",
+      "aliases": [
+        "白鳥警部"
+      ],
+      "type": "キャラクター",
+      "description": "警視庁捜査一課の警部"
+    },
+    {
+      "id": "nakamori",
+      "name": "中森銀三",
+      "aliases": [
+        "中森警部"
+      ],
+      "type": "キャラクター",
+      "description": "警視庁捜査二課の警部"
+    },
+    {
+      "id": "aoko",
+      "name": "中森青子",
+      "aliases": [
+        "青子"
+      ],
+      "type": "キャラクター",
+      "description": "中森銀三の娘。黒羽快斗の幼なじみ"
+    },
+    {
+      "id": "jirokichi",
+      "name": "鈴木次郎吉",
+      "aliases": [
+        "次郎吉"
+      ],
+      "type": "キャラクター",
+      "description": "鈴木財閥の相談役。園子の伯父"
+    },
+    {
+      "id": "kyogoku",
+      "name": "京極真",
+      "aliases": [
+        "蹴撃の貴公子"
+      ],
+      "type": "キャラクター",
+      "description": "杯戸高校の空手家。園子の恋人"
+    },
+    {
+      "id": "heiji",
+      "name": "服部平次",
+      "aliases": [
+        "平次",
+        "西の高校生探偵"
+      ],
+      "type": "キャラクター",
+      "description": "大阪の高校生探偵"
+    },
+    {
+      "id": "kazuha",
+      "name": "遠山和葉",
+      "aliases": [
+        "和葉"
+      ],
+      "type": "キャラクター",
+      "description": "服部平次の幼なじみ"
+    },
+    {
+      "id": "momiji",
+      "name": "大岡紅葉",
+      "aliases": [
+        "紅葉"
+      ],
+      "type": "キャラクター",
+      "description": "京都の競技かるたの実力者"
+    },
+    {
+      "id": "masumi",
+      "name": "世良真純",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "帝丹高校の女子高生探偵。赤井秀一の妹"
+    },
+    {
+      "id": "shukichi",
+      "name": "羽田秀吉",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "将棋のプロ棋士。赤井秀一の弟"
+    },
+    {
+      "id": "mary",
+      "name": "世良メアリー",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "赤井秀一・羽田秀吉・世良真純の母"
+    },
+    {
+      "id": "karasuma",
+      "name": "烏丸蓮耶",
+      "aliases": [
+        "あの方"
+      ],
+      "type": "キャラクター",
+      "description": "黒ずくめの組織のボス"
+    },
+    {
+      "id": "rum",
+      "name": "ラム",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "黒ずくめの組織のナンバー2"
+    },
+    {
+      "id": "wakita",
+      "name": "脇田兼則",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "いろは寿司の板前。毛利小五郎の弟子"
+    },
+    {
+      "id": "wakasa",
+      "name": "若狭留美",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "帝丹小学校1年B組の副担任"
+    },
+    {
+      "id": "james",
+      "name": "ジェイムズ・ブラック",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "日本で組織を追うFBIチームの責任者"
+    },
+    {
+      "id": "jodie",
+      "name": "ジョディ・スターリング",
+      "aliases": [
+        "ジョディ"
+      ],
+      "type": "キャラクター",
+      "description": "FBIの捜査官"
+    },
+    {
+      "id": "detective-boys",
+      "name": "少年探偵団",
+      "aliases": [],
+      "type": "組織",
+      "description": "帝丹小学校1年B組の子どもたちの探偵グループ"
+    },
+    {
+      "id": "fbi",
+      "name": "FBI",
+      "aliases": [],
+      "type": "組織",
+      "description": "アメリカの連邦捜査局"
+    },
+    {
+      "id": "koan",
+      "name": "公安警察",
+      "aliases": [
+        "公安"
+      ],
+      "type": "組織",
+      "description": "降谷零らが属する警察の公安部門"
+    },
+    {
+      "id": "cia",
+      "name": "CIA",
+      "aliases": [],
+      "type": "組織",
+      "description": "アメリカの諜報機関"
+    },
+    {
+      "id": "mpd",
+      "name": "警視庁",
+      "aliases": [],
+      "type": "組織",
+      "description": "東京の警察組織"
+    },
+    {
+      "id": "mpd-div1",
+      "name": "警視庁捜査一課",
+      "aliases": [
+        "捜査一課"
+      ],
+      "type": "組織",
+      "description": "凶悪事件を扱う警視庁の部署"
+    },
+    {
+      "id": "osaka-pd",
+      "name": "大阪府警",
+      "aliases": [],
+      "type": "組織",
+      "description": "大阪の警察組織"
+    },
+    {
+      "id": "suzuki-zaibatsu",
+      "name": "鈴木財閥",
+      "aliases": [],
+      "type": "組織",
+      "description": "鈴木園子の家が経営する大財閥"
+    },
+    {
+      "id": "kick-shoes",
+      "name": "キック力増強シューズ",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "阿笠博士の発明品"
+    },
+    {
+      "id": "detective-badge",
+      "name": "探偵バッジ",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "阿笠博士の発明品"
+    },
+    {
+      "id": "antidote",
+      "name": "APTX4869の解毒剤",
+      "aliases": [
+        "解毒剤"
+      ],
+      "type": "アイテム",
+      "description": "灰原哀が研究する解毒剤"
+    },
+    {
+      "id": "pandora",
+      "name": "パンドラ",
+      "aliases": [],
+      "type": "アイテム",
+      "description": "怪盗キッドが探す宝石"
+    },
+    {
+      "id": "beika",
+      "name": "米花町",
+      "aliases": [],
+      "type": "場所",
+      "description": "コナンや蘭が暮らす架空の町"
+    },
+    {
+      "id": "haido",
+      "name": "杯戸町",
+      "aliases": [],
+      "type": "場所",
+      "description": "米花町の隣の架空の町"
+    },
+    {
+      "id": "teitan-high",
+      "name": "帝丹高校",
+      "aliases": [],
+      "type": "場所",
+      "description": "新一・蘭・園子が通う高校"
+    },
+    {
+      "id": "teitan-elem",
+      "name": "帝丹小学校",
+      "aliases": [],
+      "type": "場所",
+      "description": "コナンや灰原が通う小学校"
+    },
+    {
+      "id": "ekoda-high",
+      "name": "江古田高校",
+      "aliases": [],
+      "type": "場所",
+      "description": "黒羽快斗が通う高校"
+    },
+    {
+      "id": "kudo-house",
+      "name": "工藤邸",
+      "aliases": [],
+      "type": "場所",
+      "description": "米花町にある工藤家の洋館"
+    },
+    {
+      "id": "poirot",
+      "name": "喫茶ポアロ",
+      "aliases": [
+        "ポアロ"
+      ],
+      "type": "場所",
+      "description": "毛利探偵事務所の1階の喫茶店"
+    },
+    {
+      "id": "magic-kaito",
+      "name": "まじっく快斗",
+      "aliases": [],
+      "type": "作品",
+      "description": "青山剛昌の別作品"
+    },
+    {
+      "id": "movie-junkoku",
+      "name": "名探偵コナン 純黒の悪夢",
+      "aliases": [
+        "純黒の悪夢"
+      ],
+      "type": "作品",
+      "description": "2016年公開の劇場版"
+    },
+    {
+      "id": "movie-karakurenai",
+      "name": "名探偵コナン から紅の恋歌",
+      "aliases": [
+        "から紅の恋歌"
+      ],
+      "type": "作品",
+      "description": "2017年公開の劇場版"
+    },
+    {
+      "id": "movie-kurogane",
+      "name": "名探偵コナン 黒鉄の魚影",
+      "aliases": [
+        "黒鉄の魚影"
+      ],
+      "type": "作品",
+      "description": "2023年公開の劇場版"
+    },
+    {
+      "id": "ytv",
+      "name": "読売テレビ系列",
+      "aliases": [
+        "読売テレビ"
+      ],
+      "type": "媒体",
+      "description": "アニメ名探偵コナンの放送局"
+    },
+    {
+      "id": "tms",
+      "name": "トムス・エンタテインメント",
+      "aliases": [],
+      "type": "企業",
+      "description": "アニメ名探偵コナンの制作会社"
+    },
+    {
+      "id": "precure-series",
+      "name": "プリキュアシリーズ",
+      "aliases": [
+        "プリキュア"
+      ],
+      "type": "作品",
+      "description": "東映アニメーション制作の女児向けアニメシリーズ"
+    },
+    {
+      "id": "futari-precure",
+      "name": "ふたりはプリキュア",
+      "aliases": [],
+      "type": "作品",
+      "description": "プリキュアシリーズ第1作"
+    },
+    {
+      "id": "nagisa",
+      "name": "美墨なぎさ",
+      "aliases": [
+        "なぎさ"
+      ],
+      "type": "キャラクター",
+      "description": "ふたりはプリキュアの主人公の一人"
+    },
+    {
+      "id": "cure-black",
+      "name": "キュアブラック",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "美墨なぎさが変身したプリキュア"
+    },
+    {
+      "id": "honoka",
+      "name": "雪城ほのか",
+      "aliases": [
+        "ほのか"
+      ],
+      "type": "キャラクター",
+      "description": "ふたりはプリキュアの主人公の一人"
+    },
+    {
+      "id": "cure-white",
+      "name": "キュアホワイト",
+      "aliases": [],
+      "type": "キャラクター",
+      "description": "雪城ほのかが変身したプリキュア"
+    }
+  ]
+}

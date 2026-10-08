@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jev GraphRAG 検索</title>
+<style>
+  :root { --fg:#222; --muted:#666; --line:#ddd; --bg:#fafafa; --accent:#1f4e9c; --cite:#ffb300; --req:#d32f2f; }
+  * { box-sizing: border-box; }
+  [hidden] { display:none !important; }   /* .row などの display 指定より hidden を優先する */
+  body { margin:0; font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; color:var(--fg); background:var(--bg); }
+  header { padding:8px 20px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:6px 16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; white-space:nowrap; }
+  header .sub { font-size:12px; }
+  @media (max-width:1700px) { header .sub { display:none; } }   /* 狭い画面では右上のコストと 1 行に収めるため隠す */
+  /* 右上: 直近の検索の時間と費用 + 累計費用・上限・マスター */
+  .hdrright { margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; gap:2px; min-width:0; }
+  .hdrmeta { display:flex; gap:12px; align-items:baseline; }
+  #budget { color:var(--muted); font-size:12px; }
+  .lastcost { display:flex; align-items:center; gap:8px; font-size:12px; color:#333; }
+  .lastcost:empty { display:none; }
+  .lastcost .costbar { width:140px; height:5px; }
+  .lastcost .tag { font-size:11px; padding:0 6px; }
+  .lastcost b { font-weight:600; }
+  .vh { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  main { padding:12px 20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 16px; margin-bottom:16px; }
+  #form textarea { width:100%; font-size:15px; padding:8px; border:1px solid #bbb; border-radius:6px; resize:vertical; }
+  .card.slim { padding:8px 12px; margin-bottom:12px; }
+  .qrow { display:flex; align-items:center; gap:10px; }
+  .qrow input[type=text] { flex:1; min-width:0; font-size:15px; padding:6px 10px; border:1px solid #bbb; border-radius:6px; }
+  .qrow button.primary { padding:6px 22px; }
+  .qrow #status { white-space:nowrap; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin-top:8px; }
+  .qbtn { font-size:12px; padding:4px 8px; border:1px solid #bbb; background:#f4f4f4; border-radius:14px; cursor:pointer; }
+  .qbtn:hover { background:#e8eefc; }
+  button.primary { font-size:15px; padding:8px 20px; background:var(--accent); color:#fff; border:0; border-radius:6px; cursor:pointer; }
+  button.primary:disabled { background:#999; cursor:wait; }
+  .ctrl button { font-size:12px; padding:3px 8px; margin-right:4px; border:1px solid #bbb; background:#fff; border-radius:4px; cursor:pointer; }
+  .muted { color:var(--muted); font-size:13px; }
+  .err { color:#b00020; }
+  .panel h2 { font-size:16px; margin:0 0 8px; display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  .tag { display:inline-block; font-size:12px; padding:1px 8px; border-radius:10px; background:#eee; }
+  .tag.ok { background:#e3f4e5; color:#1b5e20; }
+  .tag.ng { background:#fde7e9; color:#b00020; }
+  /* 終了理由のタグ(図のバッジと同じ色分け。STOP_TONE / TONE_COLOR) */
+  .tag.stop { border:1px solid; font-weight:600; }
+  .tag.fallback { background:#f3e5f5; color:#6a1b9a; border:1px solid #ce93d8; }
+  .fallback-note { color:#6a1b9a; font-weight:600; }
+  .tag.stop-ok { background:#e3f4e5; color:#1b5e20; border-color:#81c784; }
+  .tag.stop-warn { background:#fff3e0; color:#a84300; border-color:#ffb74d; }
+  .tag.stop-neutral { background:#eceff1; color:#455a64; border-color:#b0bec5; }
+  .tag.stop-alert { background:#fbe9e7; color:#bf360c; border-color:#ff8a65; }
+  .tag.stop-ng { background:#fde7e9; color:#b00020; border-color:#e57373; }
+  /* 図の枠: 高さは画面に収まる上限まで。SVG は縦横比を保って枠に収まるよう縮小する(下限 0.55)。
+     スクロールバーは出さず(overflow:hidden)、見る場所の移動はドラッグ・矢印キー・横スクロールだけ(位置は非表示のスクロール位置で持つ)。
+     図が枠より小さいときは中央寄せ(flex + margin:auto。はみ出すときは auto の余白が 0 になり左上から) */
+  /* 図の枠は画面の主役: 薄い背景と影。高さはウィンドウの残り(最低 420px)を JS で決める(graphAvailHeight) */
+  .graphframe { position:relative; border:1px solid #cfd8e6; border-radius:8px; background:#f7f9fc; margin-top:4px;
+                box-shadow:0 2px 10px rgba(31,78,156,.10); }
+  .graphwrap { overflow:hidden; display:flex; cursor:grab; touch-action:pan-y; }
+  .graphwrap.pannable { touch-action:none; }   /* 動かせるときは 1 本指ドラッグ・2 本指ピンチを図が受け取る */
+  .graphwrap svg { display:block; flex:none; margin:auto; -webkit-user-select:none; user-select:none; }
+  .graphwrap:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  .graphwrap.dragging, .graphwrap.dragging * { cursor:grabbing !important; }
+  /* 操作の行: 再生ボタン(左)とズーム(右) */
+  .graphhead { display:flex; align-items:center; flex-wrap:wrap; gap:4px 12px; }
+  .zoombar { margin-left:auto; display:inline-flex; align-items:center; gap:4px; }
+  .zbtn { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:26px; padding:0 6px;
+          border:1px solid #bbb; background:#fff; color:#333; border-radius:4px; cursor:pointer; font-size:12px; }
+  .zbtn:hover:not(:disabled) { background:#e8eefc; }
+  .zbtn:disabled { opacity:.4; cursor:default; }
+  .zoompct { min-width:3.2em; text-align:center; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  /* ウィンドウいっぱいに表示(ブラウザのウィンドウの中を覆う重ね表示。ディスプレイ全体の全画面ではない)。
+     詳細ポップアップ(z-index 1000)はこの上に出る */
+  .graph.fs { position:fixed; inset:0; z-index:900; background:#fff; padding:10px 14px; display:flex; flex-direction:column; box-sizing:border-box; }
+  .graph.fs .graphframe { flex:1; min-height:0; display:flex; }
+  .graph.fs .graphwrap { flex:1; min-width:0; max-height:none; }
+  /* 凡例: 図のすぐ上に 1〜2 行で常に出す(詳しい説明はマウスを乗せると出る) */
+  .legend.compact { gap:2px 12px; font-size:11px; margin:2px 0 4px; color:#444; }
+  .legend.compact span.sw { width:10px; height:10px; }
+  .legend.compact .lgline { display:inline-block; width:18px; height:0; border-top:3px solid; vertical-align:3px; margin-right:4px; }
+  .legend.compact .lgline.dash { border-top:2px dashed #999; }
+  .graphhead label.rej { font-size:12px; color:#333; display:inline-flex; align-items:center; gap:4px; }
+  .hint { font-size:12px; color:var(--muted); margin-left:8px; }
+  .panel h3 { font-size:15px; margin:10px 0 4px; }
+  .panel .costrow { margin-bottom:6px; }
+  /* ホバー / クリック固定の詳細ポップアップ(画面に 1 つだけ。カーソルの近くに出し、ホバー中の要素は隠さない) */
+  #popup { position:fixed; z-index:1000; display:none; width:max-content; max-width:min(360px, calc(100vw - 16px));
+           max-height:50vh; overflow:auto; background:#fff; border:1px solid #ccc; border-radius:8px;
+           box-shadow:0 4px 14px rgba(0,0,0,.18); padding:8px 12px; font-size:13px; pointer-events:none; }
+  #popup.show { display:block; }
+  #popup.pinned { pointer-events:auto; border-color:var(--accent); user-select:text; }
+  #popup h3 { margin:0 0 4px; font-size:14px; }
+  #popup p { margin:4px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+  #popup .pinbar { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px;
+                   color:var(--accent); margin:-2px 0 6px; position:sticky; top:-8px; background:#fff; padding-top:2px; }
+  #popup .pinbar button { font-size:14px; line-height:1; padding:2px 8px; border:1px solid #bbb; background:#fff; border-radius:4px; cursor:pointer; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; margin:6px 0; }
+  .legend span.sw { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:4px; }
+  .steplabel { font-size:13px; margin-left:8px; color:var(--accent); font-weight:bold; }
+  table { border-collapse:collapse; font-size:13px; margin:4px 0 10px; }
+  th, td { border:1px solid var(--line); padding:3px 8px; text-align:left; vertical-align:top; }
+  th { background:#f4f4f4; }
+  .answer { font-size:16px; padding:8px 12px; background:#f6f9ff; border-left:4px solid var(--accent); margin:6px 0; white-space:pre-wrap; }
+  /* 回答と引用(図の上)。回答は 4 行でたたむ。引用は折りたたみ */
+  .answer.clamped { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; line-clamp:4; overflow:hidden; }
+  .anstags { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin:4px 0; }
+  .morebtn { font-size:12px; padding:1px 10px; border:1px solid #bbb; background:#fff; border-radius:12px; cursor:pointer; color:var(--accent); margin-left:auto; }
+  .morebtn:hover { background:#e8eefc; }
+  .answersec h3 { margin-top:4px; }
+  .citebox { margin:4px 0; }
+  .citebox summary { font-weight:normal; font-size:13px; }
+  .reqline { margin:4px 0; }
+  .cite { margin:6px 0; padding:6px 10px; border:1px solid var(--line); border-radius:6px; }
+  .cite .claim { font-weight:bold; }
+  .cite .chunk { margin:4px 0 0 12px; font-size:13px; color:#333; }
+  .cite .chunk b { color:var(--accent); }
+  details { margin:8px 0; }
+  summary { cursor:pointer; font-weight:bold; }
+  .rej { color:#999; }
+  .compare { display:flex; flex-direction:column; gap:0; }
+  /* 時間と費用の内訳(結果見出しの下。チップ + 合計に占める割合の横棒) */
+  .costrow { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:-2px 0 8px; font-size:12px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:12px; background:#f1f3f6; border:1px solid #e1e4ea; }
+  .chip .sw { width:10px; height:10px; border-radius:2px; display:inline-block; }
+  .costbar { display:flex; width:100%; max-width:640px; height:8px; border-radius:4px; overflow:hidden; background:#eceff3; }
+  .costbar span { display:block; height:100%; }
+  .c-bedrock { background:#7b61ff; } .c-jev { background:#f28e2b; } .c-ddb { background:#59a14f; } .c-other { background:#c8ccd4; }
+  svg text { font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  svg .hit { cursor:pointer; }
+  svg .elabel { cursor:pointer; }
+  svg path.edge.hl { stroke:#e65100; stroke-opacity:1; }
+  svg .elabel.hl rect { stroke:#e65100; stroke-width:1.5; fill-opacity:1; }
+  svg .elabel.hl text { fill:#e65100; fill-opacity:1; }
+  /* 通ったルートの流れ(線の上に重ねた点線を source → target の向きに流す。IN は左向き) */
+  svg path.flow { fill:none; pointer-events:none; stroke-linecap:round; animation:flow-fwd 1.4s linear infinite; }
+  svg path.flow.passed { stroke:#fff; stroke-opacity:.75; stroke-dasharray:4 14; }
+  svg path.flow.cited { stroke:#ffd54f; stroke-opacity:1; stroke-dasharray:7 11; animation-duration:.7s; }
+  svg path.flow.rev { animation-name:flow-rev; }
+  @keyframes flow-fwd { from { stroke-dashoffset:0; } to { stroke-dashoffset:-18; } }
+  @keyframes flow-rev { from { stroke-dashoffset:0; } to { stroke-dashoffset:18; } }
+  @media (prefers-reduced-motion: reduce) { svg path.flow { animation:none; } }
+  svg [data-pop]:focus { outline:none; }
+  svg [data-pop]:focus-visible rect:first-child { stroke:#e65100; stroke-width:2.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Jev GraphRAG 検索</h1>
+  <span class="muted sub">API Gateway → query Lambda(ローカルの中継サーバー経由)</span>
+  <!-- 右上: 直近の検索の時間と費用(内訳と横棒)・累計費用と上限・マスター -->
+  <div class="hdrright">
+    <div id="lastcost" class="lastcost" role="group" aria-label="直近の検索の時間と費用" aria-live="polite"></div>
+    <div class="hdrmeta">
+      <span id="budget" aria-live="polite"></span>
+      <span id="master-info" class="muted" style="font-size:12px" aria-label="マスターの版と件数"></span>
+    </div>
+  </div>
+</header>
+<main>
+  <section class="card slim" id="form">
+    <!-- 質問は 1 行。Enter で検索(日本語の変換中の Enter は除く) -->
+    <div class="qrow">
+      <label for="question" class="vh">質問(200 文字まで)</label>
+      <input type="text" id="question" maxlength="200" aria-label="質問(200 文字まで)" autocomplete="off"
+             placeholder="質問を入力(200 文字まで) 例: 工藤新一は現在、誰の家に居候しているか？">
+      <button class="primary" id="search" aria-label="検索する">検索</button>
+      <span id="status" class="muted" aria-live="polite"></span>
+    </div>
+    <!-- 評価の質問ボタンとモード選択は非表示(常に adaptive で検索)。hidden を外せば元に戻る -->
+    <div class="row" id="qbuttons" aria-label="評価用の質問" hidden></div>
+    <div class="row" role="radiogroup" aria-label="検索モード" hidden>
+      <label><input type="radio" name="mode" value="adaptive" checked aria-label="adaptive"> adaptive(十分性で止める・最大3ホップ)</label>
+      <label><input type="radio" name="mode" value="fixed1" aria-label="fixed1"> fixed1(1ホップ固定)</label>
+      <label><input type="radio" name="mode" value="fixed2" aria-label="fixed2"> fixed2(2ホップ固定)</label>
+      <label><input type="radio" name="mode" value="compare" aria-label="3つ並べて比較"> 3つ並べて比較</label>
+    </div>
+    <!-- 選外の表示の本体(状態の置き場所)。画面では各図の操作行のチェックで切り替える -->
+    <div class="row" hidden>
+      <label><input type="checkbox" id="showRejected" aria-label="選外の候補も図に表示"> 選外の候補も図に表示</label>
+    </div>
+  </section>
+  <section id="results" aria-live="polite"></section>
+</main>
+
+<script src="/graph_model.js"></script>
+<script>
+"use strict";
+// ============================================================== 状態
+const S = { master: null, chunks: {}, names: {}, questions: [], selectedQ: null, edgeTypes: {} };
+const MODES = ["adaptive", "fixed1", "fixed2"];
+const STOP_LABEL = {
+  sufficient: "十分と判定して終了", max_hops: "最大ホップに到達", max_chunks: "チャンク上限に到達",
+  no_neighbors: "進める隣が無い", out_of_scope: "対象外の質問", no_entry: "入口が見つからない",
+  no_chunks: "チャンクが無い", entry_judge_missing: "前段判定が取れない", jev_cap: "Jev の回数上限",
+  deadline: "締め切り(時間切れ)",
+};
+// 終了理由の色分け(図のバッジと結果見出しのタグで共通)。
+// ok = 十分(緑) / warn = チャンク上限(橙) / neutral = 最大ホップ・候補なし(灰) / alert = Jev 上限・締め切り(赤みの橙) / ng = 対象外・入口なし(赤)
+const STOP_TONE = {
+  sufficient: "ok", max_chunks: "warn", truncated: "warn",
+  max_hops: "neutral", no_neighbors: "neutral", no_chunks: "neutral",
+  jev_cap: "alert", deadline: "alert", entry_judge_missing: "alert",
+  out_of_scope: "ng", no_entry: "ng",
+};
+const TONE_COLOR = {
+  ok: { bg: "#e3f4e5", fg: "#1b5e20", line: "#81c784" },
+  warn: { bg: "#fff3e0", fg: "#a84300", line: "#ffb74d" },
+  neutral: { bg: "#eceff1", fg: "#455a64", line: "#b0bec5" },
+  alert: { bg: "#fbe9e7", fg: "#bf360c", line: "#ff8a65" },
+  ng: { bg: "#fde7e9", fg: "#b00020", line: "#e57373" },
+};
+const stopTone = (reason) => STOP_TONE[reason] || "neutral";
+const stopLabel = (reason) => STOP_LABEL[reason] || reason || "?";
+
+// ============================================================== 小物(データ由来の文字は必ず textContent)
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null) continue;
+    if (k === "class") e.className = v;
+    else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+const SVGNS = "http://www.w3.org/2000/svg";
+function sv(tag, attrs, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  return e;
+}
+const f2 = (v) => (v == null ? "—" : Number(v).toFixed(2));
+const ms = (v) => (v == null ? "—" : Math.round(v) + " ms");
+const usd = (v) => (v == null ? "—" : "$" + Number(v).toFixed(6));
+const sec = (v) => (v == null ? "—" : (v / 1000).toFixed(2) + "s");
+const usd4 = (v) => (v == null ? "—" : "$" + Number(v).toFixed(4));
+const nameOf = (id) => (id == null ? "—" : (S.names[id] || id));
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+async function getJSON(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(path + " " + r.status);
+  return r.json();
+}
+
+// ============================================================== 起動
+async function init() {
+  try {
+    const [master, chunks, questions] = await Promise.all([
+      getJSON("/api/master"), getJSON("/api/chunks"), getJSON("/api/questions")]);
+    S.master = master;
+    for (const e of master.entities || []) S.names[e.id] = e.name;
+    for (const c of chunks) S.chunks[String(c.chunk_id).toLowerCase()] = c;
+    for (const t of master.edge_types || []) S.edgeTypes[t.name] = t.template;
+    const mi = master._master;
+    if (mi) {
+      const src = mi.source === "dynamodb" ? "DynamoDB" : "同梱ファイル";
+      document.getElementById("master-info").textContent =
+        `マスター ${String(mi.version || "").slice(0, 8)}(${mi.entities} 件・${src})`;
+    }
+    S.questions = questions;
+  } catch (e) {
+    document.getElementById("status").textContent = "データの読み込みに失敗しました: " + e.message;
+  }
+  const box = document.getElementById("qbuttons");
+  box.appendChild(el("span", { class: "muted", text: "評価の質問:" }));
+  for (const q of S.questions) {
+    box.appendChild(el("button", {
+      class: "qbtn", type: "button", title: q.question, "aria-label": q.id + " の質問を入れる",
+      onclick: () => { document.getElementById("question").value = q.question; S.selectedQ = q; },
+    }, `${q.id}(${q.type})`));
+  }
+  document.getElementById("question").addEventListener("input", () => {
+    const v = document.getElementById("question").value.trim();
+    if (S.selectedQ && S.selectedQ.question !== v) S.selectedQ = null;
+  });
+  document.getElementById("search").addEventListener("click", search);
+  // 選外の候補の表示は、表示中の図にもその場で反映する(検索し直さない)
+  // (チェックの本体は入力欄の中に非表示で置き、各図の操作行のチェックと同期する)
+  document.getElementById("showRejected").addEventListener("change", (ev) => {
+    for (const cb of document.querySelectorAll("input.rejToggle")) cb.checked = ev.target.checked;
+    for (const g of GRAPHS) { if (g.frame.isConnected) g.rebuild(); else GRAPHS.delete(g); }
+  });
+  // 1 行の入力なので Enter で検索(日本語の変換を確定する Enter は除く)
+  document.getElementById("question").addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" || ev.isComposing || ev.keyCode === 229) return;
+    ev.preventDefault();
+    if (!document.getElementById("search").disabled) search();
+  });
+  refreshBudget();
+}
+
+async function refreshBudget(spent, limit) {
+  try {
+    if (spent == null) { const b = await getJSON("/api/budget"); spent = b.spent_usd; limit = b.limit_usd; }
+    document.getElementById("budget").textContent = `累計費用 $${spent.toFixed(4)} / 上限 $${limit.toFixed(2)}`;
+  } catch (_) { /* 表示だけなので無視 */ }
+}
+
+// ============================================================== 検索
+async function callQuery(question, mode) {
+  const started = performance.now();
+  let status = 0, data = null;
+  try {
+    const r = await fetch("/api/query", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, mode }),
+    });
+    status = r.status;
+    data = await r.json().catch(() => ({ message: "応答が JSON ではありません" }));
+  } catch (e) {
+    data = { message: "ローカルサーバーに接続できません: " + e.message };
+  }
+  return { mode, status, data, browserMs: performance.now() - started };
+}
+
+async function search() {
+  const question = document.getElementById("question").value.trim();
+  const status = document.getElementById("status");
+  if (!question) { status.textContent = "質問を入力してください"; return; }
+  if (question.length > 200) { status.textContent = "質問は 200 文字までです"; return; }
+  const sel = document.querySelector("input[name=mode]:checked").value;
+  const modes = sel === "compare" ? MODES : [sel];
+  const required = S.selectedQ && S.selectedQ.question === question ? S.selectedQ : null;
+  const btn = document.getElementById("search");
+  btn.disabled = true;
+  const results = document.getElementById("results");
+  results.replaceChildren();
+  const wrap = el("div", { class: modes.length > 1 ? "compare" : "" });
+  results.appendChild(wrap);
+  try {
+    for (let i = 0; i < modes.length; i++) {
+      status.textContent = `検索中… ${modes[i]}(${i + 1}/${modes.length})`;
+      if (i > 0) await new Promise((r) => setTimeout(r, 1100));   // 使用量プランは 1 回/秒
+      const res = await callQuery(question, modes[i]);
+      renderHeaderCost(res);               // 右上に直近の検索の時間と費用を出す
+      const panel = renderRun(res, required);
+      wrap.appendChild(panel);
+      fitAllGraphs();
+      // 1 件目の結果は、回答の下の図が画面に入るよう結果の先頭まで送る(既に見えていれば動かさない)
+      if (i === 0) {
+        requestAnimationFrame(() => {     // 図の大きさが決まってから測る
+          const fr = panel.querySelector(".graphframe") || panel.querySelector(".answer");
+          if (fr && fr.getBoundingClientRect().bottom > window.innerHeight) {
+            panel.scrollIntoView({ block: "start", behavior: "smooth" });
+          }
+        });
+      }
+      const local = res.data && res.data._local;
+      if (local) refreshBudget(local.spent_usd, local.limit_usd);
+    }
+    status.textContent = "完了";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ============================================================== 1 回ぶんの表示
+function renderRun(res, required) {
+  const d = res.data || {};
+  const local = d._local || {};
+  const cost = local.cost || {};
+  const panel = el("section", { class: "card panel", "aria-label": res.mode + " の結果" });
+  const ok = res.status === 200 && d.ok;
+  panel.appendChild(el("h2", null,
+    el("span", { text: res.mode }),
+    el("span", { class: "tag " + (ok ? "ok" : "ng"), text: ok ? "OK" : `失敗 (${res.status})` }),
+    d.stop_reason ? el("span", { class: `tag stop stop-${stopTone(d.stop_reason)}`, title: `終了理由 stop_reason: ${d.stop_reason}${d.halted_at ? ` / 打ち切り位置 ${d.halted_at}` : ""}`,
+                                 text: stopLabel(d.stop_reason) }) : null,
+    d.in_scope_overridden ? el("span", { class: "tag", title: "in_scope はしきい値未満(または取れず)だが、入口が見つかったので検索を続けた", text: `in_scope ${f2(d.in_scope)} でも入口ありで続行` }) : null,
+    fallbackTag(d),
+  ));
+  // 時間と費用(合計・往復・内訳の横棒)は画面右上のヘッダーにまとめて出す(renderHeaderCost)
+  if (!ok) {
+    const msg = d.error ? `${d.error.type}${d.error.message ? ": " + d.error.message : ""}` : (d.message || "不明なエラー");
+    panel.appendChild(el("p", { class: "err", text: msg }));
+    if (res.status === 403) panel.appendChild(el("p", { class: "muted", text: "403: API キーか使用量プランの反映待ちの可能性があります(作成直後は数十秒かかることがあります)" }));
+    if (res.status === 429) panel.appendChild(el("p", { class: "muted", text: "429: 使用量プランの制限(1 回/秒・200 回/日)に当たりました" }));
+    if (cost.n_records) panel.appendChild(el("p", { class: "muted", text: `課金済みのレコード ${cost.n_records} 件(${usd(cost.total_usd)})は予算に数えました` }));
+    if (!d.entry) return panel;
+  }
+
+  // 並び: 見出し(stop・時間と費用)→ 回答と引用 → 操作行 → 図 → 凡例 → そのほか(折りたたみ)。
+  // 回答と図の両方が 1 画面目に入るよう、回答と引用は長ければ数行でたたむ(「続きを読む」で全部)
+  // ---- 回答と引用
+  panel.appendChild(renderAnswer(d, required));
+  // ---- 図(操作行・図・凡例)
+  panel.appendChild(renderGraphSection(d, required));
+  // ---- 経路(文字)・レイテンシと費用(どちらも折りたたみ)
+  panel.appendChild(renderPathText(d));
+  panel.appendChild(renderLatency(d, local, cost));
+  return panel;
+}
+
+// 入口が 0 件で意味で聞き直したときの見出しのタグ。見つけた入口があれば「意味で聞き直して見つけた入口」
+function fallbackTag(d) {
+  if (!d.entry_fallback_used) return null;
+  const fb = GraphModel.entryFallback(d);
+  const types = fb.selectedTypes.join("、") || "なし";
+  const title = `辞書(名前・別名)では入口が見つからなかったので、Jev に種別を選ばせ(${types})、` +
+    `その種別のエンティティ${fb.nQuestions ?? "?"}件に「質問の中の言葉と同じものを指しているか」を聞き直した(しきい値 ${f2(fb.threshold)})`;
+  return fb.foundBySemantic
+    ? el("span", { class: "tag fallback", title, text: `意味で聞き直して見つけた入口 ${fb.foundBySemantic} 件` })
+    : el("span", { class: "tag", title, text: "意味で聞き直しても入口なし" });
+}
+// 入口ノードの見つけ方(ポップアップ用)。古いトレース(via なし)は null
+function viaText(n, fb) {
+  if (n.col !== 0 || !n.via) return null;
+  if (n.via === "semantic") {
+    return `入口の見つけ方: 意味で聞き直して見つけた入口(質問文に名前・別名は書かれていないが、` +
+      `言い換え・説明的な言い方がこのエンティティを指すと判定。しきい値 ${f2(fb && fb.threshold)})`;
+  }
+  return "入口の見つけ方: 辞書(質問文に名前・別名が書かれている)";
+}
+
+// ============================================================== 図
+// 「全体を表示」(既定)の倍率の下限。これ未満だと文字が読めないので、そこで止めて枠の中をスクロールにする
+const GRAPH_MIN_SCALE = 0.55;
+// ズーム: 1 回の操作で 1.25 倍ずつ。上限 2.5 倍、下限は 0.3 と「全体を表示」の 0.5 倍の小さいほう
+const ZOOM_STEP = 1.25, ZOOM_MAX = 2.5, ZOOM_MIN_ABS = 0.3;
+// これ以上(px)動かしたらドラッグ(つかんで移動)扱い。未満ならクリック(詳細の固定)のまま
+const DRAG_THRESHOLD = 4;
+// 表示中の図(枠の大きさが変わったら収め直す / 選外の表示を切り替えたら作り直す)
+const GRAPHS = new Set();
+function fitAllGraphs() {
+  for (const g of GRAPHS) { if (g.frame.isConnected) g.fit(); else GRAPHS.delete(g); }
+}
+window.addEventListener("resize", fitAllGraphs);
+
+// 図の枠の高さ = ウィンドウの高さ - ページ先頭から枠の上端まで(ヘッダー・入力欄・回答・凡例・操作行)- 下の余白。
+// ページを一番上にしたときに図が画面の下端まで届く高さ。最低 GRAPH_MIN_H
+const GRAPH_MIN_H = 420, GRAPH_BOTTOM_PAD = 16;
+function graphAvailHeight(frame) {
+  const top = frame.getBoundingClientRect().top + window.scrollY;
+  return Math.max(GRAPH_MIN_H, Math.floor(window.innerHeight - top - GRAPH_BOTTOM_PAD));
+}
+
+// 「全体を表示」の倍率 = 縦横比を保って枠に収まる倍率(拡大はしない・下限 GRAPH_MIN_SCALE)
+// availH を渡せばその高さで、無ければウィンドウの残りの高さ(graphAvailHeight)で計算する
+// cap = 拡大の上限(通常表示は 1 = 拡大しない。ウィンドウいっぱいの表示は ZOOM_MAX まで広げる)
+function fitScaleOf(frame, wrap, svg, availH, cap) {
+  const w = Number(svg.dataset.w), h = Number(svg.dataset.h);
+  const availW = frame.clientWidth - 2;
+  availH = availH == null ? graphAvailHeight(frame) - 2 : availH;
+  if (!(availW > 0) || !w || !h) return null;
+  return { s: Math.max(GRAPH_MIN_SCALE, Math.min(cap == null ? 1 : cap, availW / w, availH / h)), availH };
+}
+
+// 虫眼鏡に + / − のアイコン(外部の素材は使わない)
+function magnifierIcon(plus) {
+  const s = sv("svg", { width: 16, height: 16, viewBox: "0 0 16 16", "aria-hidden": "true", focusable: "false" });
+  const line = (x1, y1, x2, y2, w) => sv("line", { x1, y1, x2, y2, stroke: "currentColor", "stroke-width": w, "stroke-linecap": "round" });
+  s.appendChild(sv("circle", { cx: 6.5, cy: 6.5, r: 4.8, fill: "none", stroke: "currentColor", "stroke-width": 1.6 }));
+  s.appendChild(line(10.2, 10.2, 14.5, 14.5, 2.2));
+  s.appendChild(line(4.2, 6.5, 8.8, 6.5, 1.5));
+  if (plus) s.appendChild(line(6.5, 4.2, 6.5, 8.8, 1.5));
+  return s;
+}
+
+// ウィンドウいっぱいに表示のアイコン(四隅の矢印)。exit = true なら矢印が内向き(元の大きさに戻す)
+function fullscreenIcon(exit) {
+  const s = sv("svg", { width: 16, height: 16, viewBox: "0 0 16 16", "aria-hidden": "true", focusable: "false" });
+  const d = exit
+    ? "M2 2l4 4M3 6h3V3 M14 2l-4 4M13 6h-3V3 M2 14l4-4M3 10h3v3 M14 14l-4-4M13 10h-3v3"
+    : "M6 6L2 2M2 5V2h3 M10 6l4-4M11 2h3v3 M6 10l-4 4M2 11v3h3 M10 10l4 4M14 11v3h-3";
+  s.appendChild(sv("path", { d, fill: "none", stroke: "currentColor", "stroke-width": 1.6, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+  return s;
+}
+
+function renderGraphSection(trace, required) {
+  const box = el("div", { class: "graph" });
+  const reqIds = required ? (required.required_chunks || []) : [];
+  // extraTop = これまでの段階で必要になった上の余白の最大(再生中に図の高さ・倍率が段階ごとに変わらないように)
+  // fs = ウィンドウいっぱいに表示中か(true / false)
+  const state = { step: 0, timer: null, model: null, extraTop: 0, fs: null, saved: null, onKey: null };
+  const build = () => {
+    state.model = GraphModel.buildGraph(trace, S.master || {},
+      { required: reqIds, showRejected: document.getElementById("showRejected").checked });
+  };
+  build();
+  state.step = state.model.totalSteps - 1;
+  const ctx = { gid: graphSeq++ };
+  const label = el("span", { class: "steplabel" });
+  const svgWrap = el("div", { class: "graphwrap", tabindex: "0", role: "region",
+    "aria-label": "検索の経路の図(+ で拡大、- で縮小、0 で全体を表示。拡大したらドラッグか矢印キーで移動)" });
+  const frame = el("div", { class: "graphframe" }, svgWrap);
+
+  // ---- ズーム(枠の大きさは変えず、枠の中で図を拡大・縮小する。図ごとに独立)
+  // scale = 今の倍率 / fit = 「全体を表示」の倍率 / manual = 利用者がズームした(画面の大きさが変わっても倍率を保つ)
+  const zoom = { scale: null, fit: null, manual: false };
+  const pct = el("span", { class: "zoompct", "aria-live": "polite" });
+  const zoomTo = (s, anchor) => {
+    if (!svgWrap.querySelector("svg") || zoom.scale == null) return;
+    const lim = zoomLimits();
+    s = Math.min(lim.max, Math.max(lim.min, s));
+    if (Math.abs(s - zoom.scale) < 1e-4) return;
+    if (!POP.pinned) hidePopup();       // 図が動くので、固定していない詳細は閉じる
+    zoom.manual = true;
+    // 既定はいま見ている枠の中心を保つ(Ctrl+ホイールはカーソル位置)
+    applyScale(s, anchor || { x: svgWrap.clientWidth / 2, y: svgWrap.clientHeight / 2 });
+  };
+  const zoomBy = (f, anchor) => zoomTo(zoom.scale * f, anchor);
+  const resetZoom = () => {
+    if (!POP.pinned) hidePopup();
+    zoom.manual = false;
+    fit();
+    svgWrap.scrollLeft = 0; svgWrap.scrollTop = 0;
+  };
+  const zoomOutBtn = el("button", { type: "button", class: "zbtn", "aria-label": "縮小", title: "縮小(-)",
+                                    onclick: () => zoomBy(1 / ZOOM_STEP) }, magnifierIcon(false));
+  const zoomInBtn = el("button", { type: "button", class: "zbtn", "aria-label": "拡大", title: "拡大(+)",
+                                   onclick: () => zoomBy(ZOOM_STEP) }, magnifierIcon(true));
+  const fitBtn = el("button", { type: "button", class: "zbtn ztext", "aria-label": "全体を表示",
+                                title: "枠に収まる倍率に戻す(0)", onclick: resetZoom }, "全体を表示");
+  const fsBtn = el("button", { type: "button", class: "zbtn", "aria-label": "ウィンドウいっぱいに表示", title: "ウィンドウいっぱいに表示",
+                               onclick: () => (state.fs ? exitFs() : enterFs()) }, fullscreenIcon(false));
+  const zoombar = el("div", { class: "zoombar", role: "group", "aria-label": "図の拡大・縮小" },
+                     zoomOutBtn, pct, zoomInBtn, fitBtn, fsBtn);
+  const zoomLimits = () => ({ min: Math.min(ZOOM_MIN_ABS, (zoom.fit || 1) * 0.5), max: ZOOM_MAX });
+  // 倍率を SVG に当てる(viewBox はそのまま、width/height だけ変える)。anchor = 枠の中で動かさない点(枠の左上からの px)
+  const applyScale = (s, anchor) => {
+    const svg = svgWrap.querySelector("svg");
+    if (!svg) return;
+    const w = Number(svg.dataset.w), h = Number(svg.dataset.h);
+    const old = zoom.scale;
+    // 図が枠より小さいときは中央寄せなので、その分のずれ(off)も入れて「枠の中で動かさない点」を換算する
+    const offX = (sc) => Math.max(0, (svgWrap.clientWidth - Math.round(w * sc)) / 2);
+    const offY = (sc) => Math.max(0, (svgWrap.clientHeight - Math.round(h * sc)) / 2);
+    let cx = 0, cy = 0;
+    if (anchor && old) {
+      cx = (svgWrap.scrollLeft + anchor.x - offX(old)) / old;
+      cy = (svgWrap.scrollTop + anchor.y - offY(old)) / old;
+    }
+    zoom.scale = s;
+    svg.setAttribute("width", Math.round(w * s));
+    svg.setAttribute("height", Math.round(h * s));
+    if (anchor && old) {
+      svgWrap.scrollLeft = cx * s + offX(s) - anchor.x;
+      svgWrap.scrollTop = cy * s + offY(s) - anchor.y;
+    }
+    pct.textContent = Math.round(s * 100) + "%";
+    const lim = zoomLimits();
+    zoomOutBtn.disabled = s <= lim.min + 1e-4;
+    zoomInBtn.disabled = s >= lim.max - 1e-4;
+    svgWrap.classList.toggle("pannable",
+      svgWrap.scrollWidth > svgWrap.clientWidth + 1 || svgWrap.scrollHeight > svgWrap.clientHeight + 1);
+  };
+
+  // wrap に描く。DOM に入っていればラベルを実測で合わせる(入る前なら fit のときに合わせる)
+  const render = () => {
+    svgWrap.replaceChildren(drawGraph(state.model, state.step, trace, ctx));
+    const svg = svgWrap.querySelector("svg");
+    if (svgWrap.isConnected) measureLabels(svg);
+  };
+  const measureLabels = (svg) => {
+    state.extraTop = Math.max(state.extraTop, fitLabels(svg) || 0);
+    if (state.extraTop) extendTop(svg, state.extraTop);
+    svg.dataset.fitted = "1";
+  };
+  const fit = () => {
+    const svg = svgWrap.querySelector("svg");
+    if (!svg || !frame.isConnected) return;
+    if (!svg.dataset.fitted) measureLabels(svg);
+    // ウィンドウいっぱいの表示中は枠がウィンドウいっぱい(高さは CSS の flex で決まる)なので、その高さで「全体を表示」を計算する
+    const f = state.fs ? fitScaleOf(frame, svgWrap, svg, frame.clientHeight - 2, ZOOM_MAX)
+                       : fitScaleOf(frame, svgWrap, svg, null, 1);
+    if (!f) return;
+    zoom.fit = f.s;
+    // 枠の高さは「全体を表示」の倍率で決め、ズームしても変えない
+    // 通常表示は枠をウィンドウの残りいっぱいの高さにする(図が小さければ中央に置く)
+    svgWrap.style.height = state.fs ? "" : Math.ceil(f.availH + 2) + "px";
+    const lim = zoomLimits();
+    applyScale(Math.min(lim.max, Math.max(lim.min, zoom.manual ? zoom.scale : f.s)), null);
+  };
+  const draw = () => {
+    if (!POP.pinned) hidePopup();      // 描き直すとホバー中の要素が消えるので、固定していない詳細は閉じる
+    const sl = svgWrap.scrollLeft, st = svgWrap.scrollTop;   // 再生中もズーム・位置を保つ
+    render();
+    fit();
+    svgWrap.scrollLeft = sl; svgWrap.scrollTop = st;
+    label.textContent = `${state.step + 1}/${state.model.totalSteps} ${state.model.steps[state.step] || ""}`;
+  };
+
+  // ---- ドラッグで移動(少し動かしたらドラッグ扱い。そのあとのクリックは詳細の固定にしない)
+  // 図のどこ(空白・ノード・線)をつかんでも動かせる。マウスは左ボタン、タッチは 1 本指。2 本指はピンチでズーム
+  const drag = { id: null, x: 0, y: 0, sl: 0, st: 0, moved: false, suppress: false };
+  const touches = new Map();            // タッチ中の指(pointerId → 位置)
+  const pinch = { d0: 0, s0: 1 };
+  const touchDist = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  svgWrap.addEventListener("pointerdown", (ev) => {
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    if (ev.pointerType === "touch") {
+      touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (touches.size === 2) {         // 2 本目: ドラッグをやめてピンチにする
+        drag.id = null;
+        pinch.d0 = touchDist(); pinch.s0 = zoom.scale;
+        drag.suppress = true; setTimeout(() => { drag.suppress = false; }, 400);
+        return;
+      }
+      if (touches.size > 2) return;
+    }
+    Object.assign(drag, { id: ev.pointerId, x: ev.clientX, y: ev.clientY,
+                          sl: svgWrap.scrollLeft, st: svgWrap.scrollTop, moved: false });
+  });
+  svgWrap.addEventListener("pointermove", (ev) => {
+    if (ev.pointerType === "touch" && touches.has(ev.pointerId)) {
+      touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (touches.size === 2 && pinch.d0 > 0) {
+        const [a, b] = [...touches.values()];
+        const r = svgWrap.getBoundingClientRect();
+        zoomTo(pinch.s0 * touchDist() / pinch.d0,
+               { x: (a.x + b.x) / 2 - r.left - svgWrap.clientLeft, y: (a.y + b.y) / 2 - r.top - svgWrap.clientTop });
+        return;
+      }
+    }
+    if (drag.id !== ev.pointerId) return;
+    // ボタンを離したのに pointerup が届かなかった(窓の外で離したなど)ときは、ドラッグを終わらせる
+    if (ev.pointerType === "mouse" && !(ev.buttons & 1)) { endDrag(ev); return; }
+    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+    if (!drag.moved) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD || !svgWrap.classList.contains("pannable")) return;
+      drag.moved = true;
+      svgWrap.setPointerCapture(ev.pointerId);
+      svgWrap.classList.add("dragging");
+      if (!POP.pinned) hidePopup();
+    }
+    svgWrap.scrollLeft = drag.sl - dx;
+    svgWrap.scrollTop = drag.st - dy;
+  });
+  const endDrag = (ev) => {
+    touches.delete(ev.pointerId);
+    if (touches.size < 2) pinch.d0 = 0;
+    if (drag.id !== ev.pointerId) return;
+    if (drag.moved) {
+      drag.suppress = true;                        // 直後の click(固定・空白クリックで閉じる)を無視する
+      setTimeout(() => { drag.suppress = false; }, 0);
+      svgWrap.classList.remove("dragging");
+    }
+    drag.id = null; drag.moved = false;
+  };
+  svgWrap.addEventListener("pointerup", endDrag);
+  svgWrap.addEventListener("pointercancel", endDrag);
+  svgWrap.addEventListener("click", (ev) => {
+    if (drag.suppress) { drag.suppress = false; ev.stopPropagation(); ev.preventDefault(); }
+  }, true);
+  // ---- キーボード(図かその中の要素にフォーカスがあるとき): + 拡大 / - 縮小 / 0 全体を表示
+  svgWrap.addEventListener("keydown", (ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key === "+" || ev.key === "=") zoomBy(ZOOM_STEP);
+    else if (ev.key === "-" || ev.key === "_") zoomBy(1 / ZOOM_STEP);
+    else if (ev.key === "0") resetZoom();
+    else if (ev.key.startsWith("Arrow")) {
+      // 矢印キーで少しずつ移動(Shift で大きく)。動かせない向きはページのスクロールに任せる
+      const step = ev.shiftKey ? 160 : 40;
+      const dx = ev.key === "ArrowLeft" ? -step : ev.key === "ArrowRight" ? step : 0;
+      const dy = ev.key === "ArrowUp" ? -step : ev.key === "ArrowDown" ? step : 0;
+      const canX = svgWrap.scrollWidth > svgWrap.clientWidth + 1, canY = svgWrap.scrollHeight > svgWrap.clientHeight + 1;
+      if ((dx && !canX) || (dy && !canY)) return;
+      if (!POP.pinned) hidePopup();
+      svgWrap.scrollLeft += dx; svgWrap.scrollTop += dy;
+    }
+    else return;
+    ev.preventDefault();
+  });
+  // ---- Ctrl(Mac は ⌘ も)+ ホイール / トラックパッドのピンチ: カーソル位置を中心にズーム
+  // ふつうの縦ホイールはページのスクロールに渡す(overflow:hidden なので枠は動かない)。
+  // トラックパッドの 2 本指の横スクロールは、図が横にはみ出しているときだけ図の移動にする
+  svgWrap.addEventListener("wheel", (ev) => {
+    if (!ev.ctrlKey && !ev.metaKey) {
+      if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) && svgWrap.scrollWidth > svgWrap.clientWidth + 1) {
+        ev.preventDefault();
+        svgWrap.scrollLeft += ev.deltaX * (ev.deltaMode === 1 ? 16 : 1);
+      }
+      return;
+    }
+    ev.preventDefault();
+    const r = svgWrap.getBoundingClientRect();
+    const f = Math.exp(-ev.deltaY * (ev.deltaMode === 1 ? 0.05 : 0.002));
+    zoomBy(f, { x: ev.clientX - r.left - svgWrap.clientLeft, y: ev.clientY - r.top - svgWrap.clientTop });
+  }, { passive: false });
+
+  const stop = () => { if (state.timer) { clearInterval(state.timer); state.timer = null; } };
+  const play = () => {
+    stop();
+    if (state.step >= state.model.totalSteps - 1) state.step = 0;
+    draw();
+    state.timer = setInterval(() => {
+      if (state.step >= state.model.totalSteps - 1) return stop();
+      state.step++; draw();
+    }, 900);
+  };
+  const go = (n) => { stop(); state.step = Math.max(0, Math.min(state.model.totalSteps - 1, n)); draw(); };
+  const ctrl = el("div", { class: "ctrl" },
+    el("button", { type: "button", "aria-label": "再生", onclick: play }, "▶ 再生"),
+    el("button", { type: "button", "aria-label": "一時停止", onclick: stop }, "⏸ 一時停止"),
+    el("button", { type: "button", "aria-label": "コマ戻し", onclick: () => go(state.step - 1) }, "◀ 戻る"),
+    el("button", { type: "button", "aria-label": "コマ送り", onclick: () => go(state.step + 1) }, "コマ送り ▶"),
+    el("button", { type: "button", "aria-label": "最初から", onclick: () => go(0) }, "⏮ 最初から"),
+    el("button", { type: "button", "aria-label": "最後まで表示", onclick: () => go(state.model.totalSteps - 1) }, "⏭ 最後まで"),
+    label,
+    el("span", { class: "hint", title: "ノード・線・バッジにマウスを乗せると詳細。クリックで固定し、× か Esc か図の空白クリックで閉じる。拡大したらドラッグ(どこをつかんでも可)か矢印キーで移動",
+                 text: "乗せると詳細・クリックで固定" }),
+  );
+
+  // ---- ウィンドウいっぱいに表示(図ごと)。ブラウザのウィンドウの中を覆う重ね表示(Fullscreen API は使わない)。
+  // 入るときはその大きさで「全体を表示」(100% の上限なし)にし、出たら入る前の倍率・位置に戻す。
+  // ウィンドウの大きさが変わったら、resize(fitAllGraphs)と枠の ResizeObserver で計算し直す
+  const setFsButton = (on) => {
+    fsBtn.replaceChildren(fullscreenIcon(on));
+    fsBtn.setAttribute("aria-label", on ? "元の大きさに戻す" : "ウィンドウいっぱいに表示");
+    fsBtn.title = on ? "元の大きさに戻す(Esc)" : "ウィンドウいっぱいに表示";
+  };
+  const enterFs = () => {
+    if (state.fs) return;
+    if (!POP.pinned) hidePopup();
+    state.saved = { scale: zoom.scale, manual: zoom.manual, sl: svgWrap.scrollLeft, st: svgWrap.scrollTop,
+                    pageY: window.scrollY, pageX: window.scrollX };
+    zoom.manual = false;
+    state.fs = true;
+    // 図が流れから抜けてページが縮み、スクロール位置がずれないよう、同じ高さの空きを残しておく
+    state.placeholder = el("div", { class: "fs-placeholder", "aria-hidden": "true", style: `height:${box.offsetHeight}px` });
+    box.before(state.placeholder);
+    box.classList.add("fs");
+    document.body.style.overflow = "hidden";      // 後ろのページはスクロールしない
+    setFsButton(true);
+    // 詳細ポップアップが出ているときの Esc はポップアップを閉じるだけ(ポップアップ側の処理に任せる)
+    state.onKey = (ev) => {
+      if (ev.key !== "Escape" || (POP.el && POP.el.classList.contains("show"))) return;
+      ev.preventDefault();
+      exitFs();
+    };
+    window.addEventListener("keydown", state.onKey, true);
+    fit();
+    svgWrap.focus({ preventScroll: true });
+  };
+  const exitFs = () => {
+    if (!state.fs) return;
+    if (state.onKey) { window.removeEventListener("keydown", state.onKey, true); state.onKey = null; }
+    document.body.style.overflow = "";
+    state.fs = false;
+    hidePopup();
+    box.classList.remove("fs");
+    if (state.placeholder) { state.placeholder.remove(); state.placeholder = null; }
+    setFsButton(false);
+    const sv0 = state.saved;
+    state.saved = null;
+    if (sv0) { zoom.manual = sv0.manual; if (sv0.manual) zoom.scale = sv0.scale; }
+    fit();                               // 元の大きさで計算し直してから、入る前の位置に戻す
+    if (sv0) {
+      svgWrap.scrollLeft = sv0.sl; svgWrap.scrollTop = sv0.st;
+      window.scrollTo(sv0.pageX, sv0.pageY);
+    }
+    fsBtn.focus({ preventScroll: true });
+  };
+
+  // 選外の候補の表示(本体は入力欄の中の非表示のチェック。全部の図で同じ)
+  const rejCb = el("input", { type: "checkbox", class: "rejToggle", "aria-label": "選外の候補も図に表示" });
+  rejCb.checked = document.getElementById("showRejected").checked;
+  rejCb.addEventListener("change", () => {
+    const main = document.getElementById("showRejected");
+    main.checked = rejCb.checked;
+    main.dispatchEvent(new Event("change"));
+  });
+  const rejLabel = el("label", { class: "rej", title: "Jev が選ばなかった隣の候補も、灰色の点線で図に出す" }, rejCb, "選外の候補も表示");
+  // 並び: 凡例(常に表示)→ 操作行(再生・選外・ズーム・ウィンドウいっぱい)→ 図
+  box.appendChild(renderLegend(state.model, !!required));
+  box.appendChild(el("div", { class: "graphhead" }, ctrl, rejLabel, zoombar));
+  box.appendChild(frame);
+  draw();
+
+  // 枠の幅が決まったとき(DOM に入った直後・画面の幅が変わったとき)に収め直す
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => fit()).observe(frame);
+  GRAPHS.add({
+    frame, fit,
+    rebuild: () => {          // 選外の表示を切り替えた: モデルを作り直す(列の数は変わらないので段階はそのまま)
+      build();
+      state.extraTop = 0;
+      state.step = Math.min(state.step, state.model.totalSteps - 1);
+      draw();
+    },
+  });
+  return box;
+}
+
+// 凡例(1〜2 行のコンパクト版)。詳しい説明は各項目の title(マウスを乗せると出る)
+function renderLegend(model, hasRequired) {
+  const lg = el("div", { class: "legend compact", "aria-label": "凡例" });
+  const item = (sw, text, title) => lg.appendChild(el("span", { title }, sw, text));
+  for (const [name, color] of Object.entries(model.typeColors)) {
+    item(el("span", { class: "sw", style: `background:${color}` }), name, `ノードの種類: ${name}`);
+  }
+  item(el("span", { class: "lgline", style: `border-color:${EDGE_COLOR.out}` }), "選んだ関係 →",
+       "太い実線 = 選んで進んだ関係(右向き)。白い粒が矢印の向きに流れる");
+  item(el("span", { class: "lgline", style: `border-color:${EDGE_COLOR.in}` }), "← 選んだ関係",
+       "左向き(IN)の選んだ関係。ラベルは左の列の側に「←相手」付き");
+  item(el("span", { class: "lgline", style: `border-color:${EDGE_COLOR.out}` }), "⇄ 向きのない関係",
+       "マスターで対称(symmetric)とした関係(間柄・組織どうし・コラボなど。どれが対称かはマスターの版による)。矢印なしで、ラベルの頭に「⇄」。色は右向きと同じ青");
+  item(el("span", { class: "lgline dash" }), "選ばなかった",
+       "灰色の細い点線 = 選ばなかった関係(濃さ・太さ = Jev のスコア)。薄い点線枠のノード = 選外");
+  item(el("span", { class: "lgline", style: `border-color:${EDGE_COLOR.outCited};border-top-style:dashed;outline:1px solid #ffd54f` }), "引用への経路",
+       "引用されたチャンクを最初に取った経路(濃い線に黄色の粒が速く流れる。別経路で再び出会っただけのものは含めない)");
+  item(el("span", { class: "sw", style: "background:var(--cite)" }), "引用チャンク", "回答で引用されたチャンク");
+  if (hasRequired) item(el("span", { class: "sw", style: "background:#fff;border:2px solid var(--req)" }), "★ required", "評価の質問の required_chunks");
+  item(el("span", { class: "sw", style: "background:#fff;border:1px solid #90a4ae" }), "+N = まとめたチャンク",
+       "バッジは 1 ノード 1 行。入りきらない分は「+3」にまとめる(乗せると全部見られる。引用・required は優先して出す)");
+  return lg;
+}
+
+// 線とラベルは同じ色。選んだ OUT は青、選んだ IN は紫(左向きの対応を見分けやすく)、選ばなかったものは灰
+const EDGE_COLOR = { out: "#1f4e9c", in: "#7b1fa2", no: "#888", outCited: "#0b2e6e", inCited: "#4a0072" };
+// badgeSlots = 1 ノードに 1 行で並べるバッジの数(超えたら最後の枠を「+N」にする)。badgeW + badgeGap = 1 枠
+const G = { nodeW: 190, nodeH: 26, badgeH: 16, badgeW: 43, badgeGap: 3, badgeSlots: 4, rowGap: 8, padX: 16,
+            top: 32, topDropped: 44, labelPad: 14,
+            stopH: 18, stopGap: 10, stopFont: 11, stopPadX: 8, stopDot: 10 };   // 終了理由のバッジ(最後の列の見出しの右)
+
+// 終了理由のバッジの幅(丸印 + 文字 + 左右の余白)
+function stopBadgeWidth(reason) {
+  return G.stopPadX * 2 + G.stopDot + GraphModel.textWidth(stopLabel(reason), G.stopFont);
+}
+
+function layout(model) {
+  const pos = {};
+  // 列の間隔はラベルの幅に合わせて広げる(最低 140px。ラベルは短くしてあるので、広げても 160px 前後)
+  const colW = G.nodeW + GraphModel.columnGap(model.edges, { minGap: 140, pad: G.labelPad,
+    nameOf: (key) => { const n = model.nodes.find((x) => x.id === key); return n ? n.name : ""; } });
+  // 見出しは 1 行(列名と十分性)。上限で捨てたチャンクがある列があるときだけ 2 行目を空ける
+  const top = model.columns.some((c) => c.droppedChunkIds.length) ? G.topDropped : G.top;
+  let maxBottom = top;
+  for (const col of model.columns) {
+    let y = top;
+    for (const id of col.nodes) {
+      const n = model.nodes.find((x) => x.id === id);
+      const x = G.padX + col.index * colW;
+      const h = G.nodeH + (n.chunks.length ? G.badgeH + G.badgeGap : 0);   // バッジは 1 行だけ
+      pos[id] = { x, y, h };
+      y += h + G.rowGap;
+    }
+    maxBottom = Math.max(maxBottom, y);
+  }
+  const nCols = Math.max(1, model.columns.length);
+  // 終了理由は最後の列の見出しの右に小さなバッジで出す(右の余白はその幅だけ)
+  const stopX = G.padX + (nCols - 1) * colW + G.nodeW + G.stopGap;
+  const width = stopX + stopBadgeWidth(model.stopReason) + G.padX;
+  return { pos, width, height: maxBottom + 12, colW, stopX, top };
+}
+
+// バッジを 1 行に収める。入りきらなければ (枠数 - 1) 個を出して残りを「+N」にまとめる。
+// 出すものは引用・required(別経路でないもの)を優先し、並びは元の順(取得順)のまま
+function badgeRow(chunks, slots) {
+  if (chunks.length <= slots) return { shown: chunks, rest: [] };
+  const important = (b) => (!b.also && (b.cited || b.required)) ? 1 : 0;
+  const ranked = chunks.map((b, i) => ({ b, i })).sort((x, y) => (important(y.b) - important(x.b)) || (x.i - y.i));
+  const keep = new Set(ranked.slice(0, slots - 1).map((x) => x.b));
+  return { shown: chunks.filter((b) => keep.has(b)), rest: chunks.filter((b) => !keep.has(b)) };
+}
+
+function drawGraph(model, step, trace, ctx) {
+  const { pos, width, height, colW, stopX, top } = layout(model);
+  const svg = sv("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "group",
+                          "aria-label": "検索の経路の図", "data-w": width, "data-h": height });
+  // 図の空白(ノード・線・バッジ以外)をクリックしたら詳細を閉じる
+  svg.addEventListener("click", (ev) => { if (!ev.target.closest("[data-pop]")) hidePopup(); });
+  const defs = sv("defs");
+  for (const [id, color] of [["arrSel", EDGE_COLOR.out], ["arrSelIn", EDGE_COLOR.in], ["arrNo", EDGE_COLOR.no],
+                             ["arrCit", EDGE_COLOR.outCited], ["arrCitIn", EDGE_COLOR.inCited], ["arrHl", "#e65100"]]) {
+    // markerUnits=userSpaceOnUse: 頭の大きさを線幅に比例させず固定(8px)
+    const m = sv("marker", { id: id + "-" + uid, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 8, markerHeight: 8,
+                             markerUnits: "userSpaceOnUse", orient: "auto-start-reverse" });
+    m.appendChild(sv("path", { d: "M0,0 L10,5 L0,10 z", fill: color }));
+    defs.appendChild(m);
+  }
+  const myUid = uid++;
+  svg.appendChild(defs);
+  const vis = (item) => GraphModel.stateAt(item, step);
+  const nodeById = Object.fromEntries(model.nodes.map((n) => [n.id, n]));
+
+  // ---- 列の見出しと十分性
+  for (const col of model.columns) {
+    const x = G.padX + col.index * colW;
+    if (step < col.index * GraphModel.STEPS_PER_COLUMN) continue;
+    // 1 行目: 列名(左)と十分性(右寄せ)。2 行目: 上限で捨てたチャンク(あるときだけ)
+    svg.appendChild(sv("text", { x, y: 16, "font-size": 13, "font-weight": "bold", fill: "#333" },
+                       col.index === 0 ? "入口" : `ホップ${col.index}`));
+    if (trace.mode === "adaptive" && col.sufficiency != null && step >= col.sufficiencyStep) {
+      const ok = trace.params && col.sufficiency >= trace.params.sufficiency_th;
+      svg.appendChild(sv("text", { x: x + G.nodeW, y: 16, "font-size": 11, "text-anchor": "end", fill: ok ? "#1b5e20" : "#b26a00" },
+        `十分性 ${f2(col.sufficiency)}${col.sufficiencyReused ? "(前と同じ)" : ""}${ok ? " ✓" : ""}`));
+    }
+    if (col.droppedChunkIds.length && step >= col.index * GraphModel.STEPS_PER_COLUMN + 2) {
+      svg.appendChild(sv("text", { x, y: 30, "font-size": 10, fill: "#b00020" },
+        `上限で捨てたチャンク: ${col.droppedChunkIds.join(", ")}`));
+    }
+  }
+
+  // ---- エッジ(ノードより先に描く)。ラベルは行き先ノードの側(矢印の先端の手前)に置き、最後に描く
+  const labelItems = [];
+  for (const e of model.edges) {
+    const st = vis(e);
+    const a = nodeById[e.from], b = nodeById[e.to];
+    if (!st.visible || !a || !b || !vis(a).visible) continue;
+    const pa = pos[e.from], pb = pos[e.to];
+    const x1 = pa.x + G.nodeW, y1 = pa.y + G.nodeH / 2, x2 = pb.x, y2 = pb.y + G.nodeH / 2;
+    const mid = (x1 + x2) / 2;
+    const d = `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
+    const score = e.score == null ? 0 : e.score;
+    const strong = e.selected && st.selectedShown;
+    const right = e.arrow !== "left";                 // none(SYM、向きなし)も右向きと同じ色・置き方
+    const sym = e.arrow === "none";
+    const flow = GraphModel.flowOf(e, step);            // 選択の段階に達した選んだエッジだけ流す
+    const cited = !!flow && flow.kind === "cited";
+    const color = strong ? (cited ? (right ? EDGE_COLOR.outCited : EDGE_COLOR.inCited) : (right ? EDGE_COLOR.out : EDGE_COLOR.in))
+                         : EDGE_COLOR.no;
+    const edgeW = strong ? 2 + 3 * score + (cited ? 1 : 0) : 0.8 + 1.2 * score;
+    const attrs = {
+      d, fill: "none", stroke: color, class: "edge", "data-edge": e.id,
+      "stroke-width": edgeW.toFixed(1),
+      "stroke-opacity": strong ? (cited ? 1 : 0.95) : (0.2 + 0.6 * score).toFixed(2),
+      "stroke-dasharray": strong ? null : "5 4",
+    };
+    const marker = `url(#${strong ? (cited ? (right ? "arrCit" : "arrCitIn") : (right ? "arrSel" : "arrSelIn")) : "arrNo"}-${myUid})`;
+    if (sym) { /* 向きのない関係は矢印を付けない */ }
+    else if (right) attrs["marker-end"] = marker; else attrs["marker-start"] = marker;
+    svg.appendChild(sv("path", attrs));
+    if (flow) {
+      // 線の上に点線を重ねて流す(path は from → to の向きに描くので、IN は逆向きに流す)
+      svg.appendChild(sv("path", { d, class: `flow ${flow.kind}${flow.reverse ? " rev" : ""}`, "data-edge": e.id,
+        "stroke-width": Math.max(1.5, edgeW * (cited ? 0.6 : 0.5)).toFixed(1), "aria-hidden": "true" }));
+    }
+    labelItems.push({ id: e.id, head: right ? e.to : e.from, headX: right ? x2 : x1, headY: right ? y2 : y1,
+                      arrow: e.arrow, score: e.score, selected: strong, edge: e,
+                      parts: GraphModel.labelParts(e, strong, b.name), color, strong });
+    const hit = sv("path", { d, fill: "none", stroke: "transparent", "stroke-width": 10, class: "hit" });
+    bindPopup(hit, `${ctx.gid}:e:${e.id}`, () => edgePopup(e, nodeById, model.minNeighborScore), `関係 ${e.edge} の詳細`);
+    bindHighlight(hit, svg, e.id);
+    svg.appendChild(hit);
+  }
+
+  // ---- エッジのラベル(白い角丸の背景付き。背景の大きさと重なりは描画後に実フォントで測って直す)
+  const placed = GraphModel.placeEdgeLabels(labelItems, { pad: G.labelPad, step: 18 });
+  for (const l of labelItems) {
+    const p = placed[l.id];
+    const g = sv("g", { class: "elabel", "data-edge": l.id, "data-group": p.group, "data-order": p.order });
+    g.appendChild(sv("rect", { x: p.x, y: p.y - 10, width: 0, height: 14, rx: 4, fill: "#fff", "fill-opacity": 0.9,
+                               stroke: l.color, "stroke-opacity": 0.35, "stroke-width": 0.8 }));
+    // 本文(短くした関係名 + IN は「←相手名」)のあとに、スコアを小さく付ける。全文はホバーの詳細で見る
+    const t = sv("text", { x: p.x, y: p.y, "text-anchor": p.anchor, "font-size": 10,
+      fill: l.color, "fill-opacity": l.strong ? 1 : 0.9, "font-weight": l.strong ? "bold" : "normal" });
+    if (l.parts.main) t.appendChild(sv("tspan", null, l.parts.main + " "));
+    t.appendChild(sv("tspan", { "font-size": GraphModel.SCORE_FONT, "font-weight": "normal", "fill-opacity": 0.85 }, l.parts.score));
+    g.appendChild(t);
+    bindPopup(g, `${ctx.gid}:e:${l.id}`, () => edgePopup(l.edge, nodeById, model.minNeighborScore), `関係 ${l.edge.edge} の詳細`);
+    bindHighlight(g, svg, l.id);
+    svg.appendChild(g);
+  }
+
+  // ---- ノードとバッジ
+  for (const n of model.nodes) {
+    const st = vis(n);
+    if (!st.visible) continue;
+    const p = pos[n.id];
+    const color = model.typeColors[n.type] || "#888";
+    const decided = st.selectedShown;
+    const chosen = decided && n.selected;
+    const rejected = decided && !n.selected;
+    const g = sv("g", { class: "hit", opacity: rejected ? 0.45 : 1 });
+    g.appendChild(sv("rect", { x: p.x, y: p.y, width: G.nodeW, height: G.nodeH, rx: 6,
+      fill: chosen ? color : "#fff", "fill-opacity": chosen ? 0.22 : 1,
+      stroke: color, "stroke-width": chosen ? 2.5 : 1.2, "stroke-dasharray": chosen ? null : "4 3" }));
+    g.appendChild(sv("rect", { x: p.x, y: p.y, width: 7, height: G.nodeH, rx: 3, fill: color }));
+    g.appendChild(sv("text", { x: p.x + 13, y: p.y + 17, "font-size": 13, "font-weight": chosen ? "bold" : "normal",
+                                fill: "#222" }, clip(n.name, 11)));
+    g.appendChild(sv("text", { x: p.x + G.nodeW - 6, y: p.y + 17, "font-size": 11, "text-anchor": "end",
+                                fill: "#555" }, f2(n.score)));
+    // 意味で聞き直して見つけた入口は、右上の角に紫の丸印(詳細はポップアップと見出しのタグ)
+    if (n.col === 0 && n.via === "semantic") {
+      const dot = sv("circle", { cx: p.x + G.nodeW - 2, cy: p.y + 2, r: 5, fill: "#8e24aa", stroke: "#fff", "stroke-width": 1.5 });
+      dot.appendChild(sv("title", null, "意味で聞き直して見つけた入口"));
+      g.appendChild(dot);
+    }
+    bindPopup(g, `${ctx.gid}:n:${n.id}`, () => nodePopup(n, model.minNeighborScore, model.maxChunksPerNode, model.maxChunksPerHop, model.entryFallback), `${n.name} の詳細${n.via === "semantic" ? "(意味で聞き直して見つけた入口)" : ""}`);
+    svg.appendChild(g);
+
+    // バッジは 1 行。入りきらない分は最後の枠を「+N」にまとめる(乗せるとノードの詳細 = 全チャンクを出す)
+    const row = badgeRow(n.chunks.filter((b) => vis(b).visible), G.badgeSlots);
+    const slotX = (i) => p.x + 4 + i * (G.badgeW + G.badgeGap);
+    const by = p.y + G.nodeH + G.badgeGap;
+    row.shown.forEach((b, i) => {
+      const bx = slotX(i);
+      const bg = sv("g", { class: "hit", opacity: b.also ? 0.5 : 1 });
+      bg.appendChild(sv("rect", { x: bx, y: by, width: G.badgeW, height: G.badgeH, rx: 8,
+        fill: b.cited ? "#ffb300" : "#eceff1", stroke: b.required ? "#d32f2f" : (b.also ? "#999" : "#b0bec5"),
+        "stroke-width": b.required ? 2 : 1, "stroke-dasharray": b.also ? "3 2" : null }));
+      bg.appendChild(sv("text", { x: bx + G.badgeW / 2, y: by + 12, "font-size": 10, "text-anchor": "middle",
+        "font-weight": b.cited ? "bold" : "normal", fill: "#222" }, (b.required ? "★" : "") + b.id));
+      bindPopup(bg, `${ctx.gid}:c:${n.id}:${b.id}`, () => chunkPopup(b, n), `チャンク ${b.id} の詳細`);
+      svg.appendChild(bg);
+    });
+    if (row.rest.length) {
+      const bx = slotX(row.shown.length);
+      const anyCited = row.rest.some((b) => b.cited && !b.also), anyReq = row.rest.some((b) => b.required && !b.also);
+      const bg = sv("g", { class: "hit" });
+      bg.appendChild(sv("rect", { x: bx, y: by, width: G.badgeW, height: G.badgeH, rx: 8,
+        fill: anyCited ? "#ffe082" : "#fff", stroke: anyReq ? "#d32f2f" : "#90a4ae",
+        "stroke-width": anyReq ? 2 : 1 }));
+      bg.appendChild(sv("text", { x: bx + G.badgeW / 2, y: by + 12, "font-size": 10, "text-anchor": "middle",
+        "font-weight": "bold", fill: "#455a64" }, `+${row.rest.length}`));
+      bindPopup(bg, `${ctx.gid}:m:${n.id}`, () => nodePopup(n, model.minNeighborScore, model.maxChunksPerNode, model.maxChunksPerHop),
+                `${n.name} のほかのチャンク ${row.rest.length} 件を含む詳細`);
+      svg.appendChild(bg);
+    }
+  }
+
+  // ---- 終了理由(最後の列の見出しの右に、色分けしたピル型のバッジ。再生では最後の段階で現れる)
+  if (step >= model.stopStep) {
+    const x = stopX, y = 16 - 12.5;                   // 見出しの文字(y=16)と同じ高さにそろえる
+    const tone = TONE_COLOR[stopTone(model.stopReason)];
+    const label = stopLabel(model.stopReason);
+    const desc = `終了理由: ${label}(stop_reason: ${model.stopReason || "?"}${model.haltedAt ? ` / 打ち切り位置 ${model.haltedAt}` : ""})`;
+    const g = sv("g", { class: "stopbadge", role: "img", "aria-label": desc });
+    g.appendChild(sv("title", null, desc));          // マウスを乗せるとコード名と打ち切り位置
+    g.appendChild(sv("rect", { x, y, width: stopBadgeWidth(model.stopReason), height: G.stopH, rx: G.stopH / 2,
+                               fill: tone.bg, stroke: tone.line, "stroke-width": 1 }));
+    g.appendChild(sv("circle", { cx: x + G.stopPadX + 3, cy: y + G.stopH / 2, r: 3, fill: tone.fg }));
+    g.appendChild(sv("text", { x: x + G.stopPadX + G.stopDot, y: y + 13, "font-size": G.stopFont, "font-weight": "bold", fill: tone.fg }, label));
+    svg.appendChild(g);
+  }
+  return svg;
+}
+let uid = 0;
+let graphSeq = 0;
+
+// ============================================================== ラベルの実測(DOM に入れたあとで呼ぶ)
+// getBBox() で文字の実寸を測り、背景の角丸を合わせ、重なっていれば上へずらす
+function fitLabels(svg) {
+  if (!svg) return;
+  const PAD_X = 4, PAD_Y = 2;
+  const labels = [...svg.querySelectorAll("g.elabel")];
+  const boxes = [];
+  for (const g of labels) {
+    const text = g.querySelector("text");
+    let bb;
+    try { bb = text.getBBox(); } catch (_) { bb = null; }
+    if (!bb || !bb.width) {                         // 測れない(非表示など)ときは見積もりで
+      const w = GraphModel.textWidth(text.textContent, 10);
+      const x = Number(text.getAttribute("x")), y = Number(text.getAttribute("y"));
+      bb = { x: text.getAttribute("text-anchor") === "end" ? x - w : x, y: y - 10, width: w, height: 13 };
+    }
+    const r = { x: bb.x - PAD_X, y: bb.y - PAD_Y, w: bb.width + 2 * PAD_X, h: bb.height + 2 * PAD_Y };
+    const rect = g.querySelector("rect");
+    rect.setAttribute("x", r.x); rect.setAttribute("y", r.y);
+    rect.setAttribute("width", r.w); rect.setAttribute("height", r.h);
+    boxes.push({ id: g.dataset.edge, group: g.dataset.group, order: Number(g.dataset.order),
+                 x0: r.x, x1: r.x + r.w, y0: r.y, y1: r.y + r.h });
+  }
+  const dy = GraphModel.resolveOverlaps(boxes, 2);
+  for (const g of labels) {
+    const d = dy[g.dataset.edge] || 0;
+    if (d) g.setAttribute("transform", `translate(0,${d})`);
+  }
+  // 積み上げたラベルの最上端が図の上端より上にはみ出す量(px)を返す。上の余白は extendTop で取る
+  const TOP_MARGIN = 2;
+  const minY = boxes.reduce((m, b) => Math.min(m, b.y0 + (dy[b.id] || 0)), Infinity);
+  return minY < TOP_MARGIN ? Math.ceil(TOP_MARGIN - minY) : 0;
+}
+
+// 図の上側に extra px の余白を取る(viewBox を上へ広げる)。倍率は data-h(広げたあとの高さ)で計算するので、
+// 余白も含めて枠に収まる。layout の元の高さは data-h0 に残す
+function extendTop(svg, extra) {
+  if (!svg.dataset.h0) svg.dataset.h0 = svg.dataset.h;
+  const w = Number(svg.dataset.w), h = Number(svg.dataset.h0) + extra;
+  svg.setAttribute("viewBox", `0 ${-extra} ${w} ${h}`);
+  svg.setAttribute("height", h);
+  svg.dataset.h = h;
+}
+
+// ホバー中はエッジの線とラベルを同時に強調する
+function bindHighlight(node, svg, edgeId) {
+  const set = (on) => {
+    for (const x of svg.querySelectorAll(`[data-edge="${CSS.escape(edgeId)}"]`)) {
+      if (x.classList.contains("edge") || x.classList.contains("elabel")) x.classList.toggle("hl", on);
+      if (x.classList.contains("edge")) {
+        const key = x.hasAttribute("marker-end") ? "marker-end" : x.hasAttribute("marker-start") ? "marker-start" : null;
+        if (!key) continue;                             // 矢印の無い線(向きのない関係)
+        if (on) { x.dataset.marker = x.getAttribute(key); x.setAttribute(key, x.dataset.marker.replace(/#arr\w+-/, "#arrHl-")); }
+        else if (x.dataset.marker) x.setAttribute(key, x.dataset.marker);
+      }
+    }
+  };
+  node.addEventListener("mouseenter", () => set(true));
+  node.addEventListener("mouseleave", () => set(false));
+}
+
+// ============================================================== 詳細ポップアップ(画面に 1 つ。ホバーで一時表示・クリックで固定)
+// - カーソルの右下 16px に出し、はみ出すなら左・上に反転。ホバー中の要素(小さいもの)は隠さないよう、その上下に避ける
+// - 固定中はマウスを離しても消えず、× / Esc / 図の空白クリック / 同じ要素をもう一度クリック(タップ)で閉じる
+const POP = { el: null, key: null, pinned: false, at: null, target: null };
+const POP_GAP = 16, POP_MARGIN = 8;
+
+function popupEl() {
+  if (POP.el) return POP.el;
+  POP.el = el("div", { id: "popup", role: "tooltip", "aria-label": "詳細" });
+  document.body.appendChild(POP.el);
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && POP.el.classList.contains("show")) hidePopup(); });
+  // 固定していないポップアップは、スクロールでホバー中の要素がカーソルの下から外れたら閉じる。
+  // まだカーソルの下にあれば(scrollIntoView の直後に遅れて届くスクロール、枠の中の小さなスクロールなど)閉じずに置き直す。
+  // 固定中のポップアップ・ポップアップ内のスクロールは対象外
+  window.addEventListener("scroll", (ev) => {
+    if (POP.pinned || !POP.el.classList.contains("show")) return;
+    if (ev.target instanceof Node && POP.el.contains(ev.target)) return;
+    const hit = POP.at ? document.elementFromPoint(POP.at.x, POP.at.y) : null;
+    if (hit && POP.target && POP.target.isConnected && POP.target.contains(hit)) placePopup(POP.at, POP.target);
+    else hidePopup();
+  }, true);
+  return POP.el;
+}
+
+function hidePopup() {
+  if (!POP.el) return;
+  POP.el.classList.remove("show", "pinned");
+  POP.el.replaceChildren();
+  POP.el.setAttribute("role", "tooltip");
+  POP.key = null; POP.pinned = false; POP.at = null; POP.target = null;
+}
+
+function showPopup(key, build, pinned, at, target) {
+  const p = popupEl();
+  p.replaceChildren();
+  if (pinned) {
+    p.appendChild(el("div", { class: "pinbar" }, el("span", { text: "固定中" }),
+      el("button", { type: "button", "aria-label": "詳細を閉じる", title: "閉じる(Esc)", onclick: hidePopup }, "×")));
+  }
+  p.appendChild(build());
+  p.classList.add("show");
+  p.classList.toggle("pinned", !!pinned);
+  p.setAttribute("role", pinned ? "dialog" : "tooltip");
+  p.scrollTop = 0;
+  POP.key = key; POP.pinned = !!pinned;
+  placePopup(at, target);
+}
+
+// at = {x, y}(画面座標のカーソル位置)。target の外枠が小さければ(ノード・ラベル・バッジ)その上下に避けて置く
+function placePopup(at, target) {
+  const p = POP.el;
+  POP.at = at; POP.target = target || null;
+  const w = p.offsetWidth, h = p.offsetHeight;
+  const vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  let box = null;
+  if (target) {
+    const r = target.getBoundingClientRect();
+    if (r.height > 0 && r.height <= 80) box = r;     // 線(当たり判定の曲線)は外枠が大きいのでカーソルだけで決める
+  }
+  let left = at.x + POP_GAP;
+  if (left + w > vw - POP_MARGIN) left = at.x - POP_GAP - w;           // 右にはみ出す → 左へ
+  let top = Math.max(at.y + POP_GAP, box ? box.bottom + 6 : -Infinity);
+  if (top + h > vh - POP_MARGIN) {
+    const above = Math.min(at.y - POP_GAP, box ? box.top - 6 : Infinity) - h;   // 下にはみ出す → 上へ
+    top = above >= POP_MARGIN ? above
+        : (vh - (box ? box.bottom : at.y) >= (box ? box.top : at.y) ? Math.max(POP_MARGIN, vh - POP_MARGIN - h) : POP_MARGIN);
+  }
+  p.style.left = Math.round(Math.max(POP_MARGIN, Math.min(left, vw - POP_MARGIN - w))) + "px";
+  p.style.top = Math.round(Math.max(POP_MARGIN, top)) + "px";
+}
+
+// 要素にホバー / クリック(タップ) / キーボードで詳細を出す。key は図と要素で一意(同じ要素の再クリックで閉じる)
+function bindPopup(node, key, build, label) {
+  node.setAttribute("data-pop", key);
+  node.setAttribute("tabindex", "0");
+  node.setAttribute("role", "button");
+  node.setAttribute("aria-label", label);
+  const isMouse = (ev) => ev.pointerType === "mouse" || ev.pointerType === "pen";
+  node.addEventListener("pointerenter", (ev) => {
+    if (!isMouse(ev) || POP.pinned) return;
+    showPopup(key, build, false, { x: ev.clientX, y: ev.clientY }, node);
+  });
+  node.addEventListener("pointermove", (ev) => {
+    if (!isMouse(ev) || POP.pinned) return;
+    // スクロールなどで閉じたあとも、要素の上でマウスを動かせばまた出す(pointerenter は出直さないため)
+    if (POP.key !== key) showPopup(key, build, false, { x: ev.clientX, y: ev.clientY }, node);
+    else placePopup({ x: ev.clientX, y: ev.clientY }, node);
+  });
+  node.addEventListener("pointerleave", (ev) => {
+    if (!isMouse(ev) || POP.pinned || POP.key !== key) return;
+    hidePopup();
+  });
+  const pin = (at) => {
+    if (POP.pinned && POP.key === key) { hidePopup(); return; }   // もう一度クリック・タップで閉じる
+    showPopup(key, build, true, at, node);
+  };
+  node.addEventListener("click", (ev) => { ev.stopPropagation(); pin({ x: ev.clientX, y: ev.clientY }); });
+  node.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    ev.preventDefault();
+    const r = node.getBoundingClientRect();
+    pin({ x: r.left + Math.min(r.width, 40), y: r.top + r.height / 2 });
+  });
+}
+
+function chunkText(id) {
+  const c = S.chunks[String(id).toLowerCase()];
+  return c ? c.text : "(本文が見つかりません)";
+}
+// 下限(min_neighbor_score)未満で外れた候補の説明。古いトレース(下限なし)では値が無いので「下限未満」だけ
+function belowMinText(minScore) {
+  return `下限 ${minScore == null ? "" : minScore + " "}未満`;
+}
+// 1 ノードの上限の説明。古いトレース(上限なし)や進まなかったノードでは数が無いので null。
+// ホップ先(chunk_source = edge_evidence)は登場チャンクではなく、たどった関係の根拠チャンクを数えている
+function perNodeText(n, perNode) {
+  if (n.appearanceCount == null) return null;
+  const evidence = n.chunkSource === "edge_evidence";
+  const what = evidence ? "関係の根拠チャンク" : "登場チャンク";
+  const how = evidence ? "関係のスコアの高い" : "登場スコアの高い";
+  const note = evidence ? "(このノードの登場チャンク上位ではなく、たどってきた関係の根拠になったチャンクだけ)" : "";
+  const limit = perNode ?? (n.cappedChunkIds.length ? n.appearanceCount - n.cappedChunkIds.length : null);
+  // 1 ホップの上限であふれた分があれば、全部は取っていない(候補にしただけ)
+  const got = (n.hopCappedChunkIds || []).length ? "候補にした" : "取得";
+  if (limit == null) return `${what} ${n.appearanceCount} 件を${got}${note}`;
+  return n.appearanceCount > limit
+    ? `${what} ${n.appearanceCount} 件のうち${how}上位${limit}件を${got}${note}`
+    : `${what} ${n.appearanceCount} 件(上限 ${limit} 件以内なので全部${got})${note}`;
+}
+// 1 ホップの上限の説明(「このホップで足したのは3件まで(スコア順)」)。古いトレースは上限の値が無い
+function perHopText(perHop) {
+  return `このホップで足したのは${perHop == null ? "上限" : perHop + "件"}まで(スコア順)`;
+}
+// edge_evidence で取ったチャンクが、どの関係の根拠か(例:「毛利蘭 → 妃英理(関係名)」。
+// 向きのない関係(SYM)は「毛利蘭 ⇄ 妃英理」)
+function evidenceText(list) {
+  return (list || []).map((r) => `${nameOf(r.from)} ${r.direction === "sym" ? "⇄" : "→"} ${nameOf(r.to)}(${r.edge})`)
+    .filter((t, i, a) => a.indexOf(t) === i).join("、");
+}
+function nodePopup(n, minScore, perNode, perHop, fallback) {
+  const box = el("div");
+  box.appendChild(el("h3", { text: `${n.name}(${n.entity})` }));
+  const status = n.selected ? "選ばれた" : n.belowMin ? `選外(${belowMinText(minScore)})` : "選外";
+  box.appendChild(el("p", { text: `種別: ${n.type} / 列: ${n.col === 0 ? "入口" : "ホップ" + n.col} / スコア: ${f2(n.score)} / ${status}` }));
+  const via = viaText(n, fallback);
+  if (via) box.appendChild(el("p", { class: n.via === "semantic" ? "fallback-note" : "muted", text: via }));
+  const limitText = perNodeText(n, perNode);
+  if (limitText) box.appendChild(el("p", { text: limitText }));
+  if (n.cappedChunkIds.length) {
+    box.appendChild(el("p", { class: "muted", text: `上限であふれて取らなかったチャンク: ${n.cappedChunkIds.join(", ")}` }));
+  }
+  if (n.hopCappedChunkIds.length) {
+    box.appendChild(el("p", { class: "muted", text: `${perHopText(perHop)}。あふれて取らなかったチャンク: ${n.hopCappedChunkIds.join(", ")}` }));
+  }
+  if (n.chunkSource === "edge_evidence" && n.chunks.length) {
+    box.appendChild(el("p", { class: "muted", text: "▼ 関係の根拠チャンク" }));
+  }
+  for (const b of n.chunks) {
+    const ev = b.also ? "" : evidenceText(b.evidenceOf);
+    box.appendChild(el("p", null, el("b", { text: `[${b.id}]${b.cited ? " 引用" : ""}${b.required ? " ★required" : ""}${b.also ? " (別経路)" : ""}${ev ? ` (根拠: ${ev})` : ""} ` }), chunkText(b.id)));
+  }
+  return box;
+}
+// 関係の向きの表示(OUT / IN / SYM・向きなし)
+function directionText(direction) {
+  return direction === "in" ? "IN" : direction === "sym" ? "⇄ 向きなし" : "OUT";
+}
+function edgePopup(e, nodeById, minScore) {
+  const a = nodeById[e.source], b = nodeById[e.target];
+  const box = el("div");
+  const sym = e.direction === "sym";
+  box.appendChild(el("h3", { text: `${e.edge}(${directionText(e.direction)})` }));
+  box.appendChild(el("p", { text: `${a ? a.name : e.source} ${sym ? "⇄" : "→"} ${b ? b.name : e.target}${sym ? "(向きのない関係)" : ""}` }));
+  box.appendChild(el("p", { text: `候補文: ${e.sentence}` }));
+  box.appendChild(el("p", { text: `手がかりスコア: ${f2(e.score)} / ${e.selected ? "選んで進んだ" : e.belowMin ? `選ばなかった(${belowMinText(minScore)})` : "選ばなかった"}${e.also ? " / 別の frontier からの同じ関係" : ""}` }));
+  return box;
+}
+function chunkPopup(b, n) {
+  const box = el("div");
+  box.appendChild(el("h3", { text: `チャンク ${b.id}` }));
+  box.appendChild(el("p", { text: `経由: ${n.name}(ホップ${b.hop})${b.also ? " / 別経路で再び出会った" : ""}${b.cited ? " / 回答で引用" : ""}${b.required ? " / required" : ""}` }));
+  const ev = b.also ? "" : evidenceText(b.evidenceOf);
+  if (ev) box.appendChild(el("p", { class: "muted", text: `関係の根拠チャンク: ${ev}` }));
+  box.appendChild(el("p", { text: chunkText(b.id) }));
+  return box;
+}
+
+// ============================================================== 回答・引用・機械検査
+function renderAnswer(d, required) {
+  const box = el("div", { class: "answersec" });
+  box.appendChild(el("h3", { text: "回答" }));
+  // 回答は 4 行でたたみ、あふれるときだけ「続きを読む」を出す(図と一緒に 1 画面目に入るように)
+  const ans = el("div", { class: "answer clamped", id: `answer-${answerSeq++}`,
+                          text: d.answer === "" ? "(回答なし)" : (d.answer ?? "(回答なし)") });
+  box.appendChild(ans);
+  const more = el("button", { type: "button", class: "morebtn", "aria-controls": ans.id, hidden: "" });
+  const setOpen = (open) => {
+    ans.classList.toggle("clamped", !open);
+    more.setAttribute("aria-expanded", open ? "true" : "false");
+    more.textContent = open ? "▲ たたむ" : "▼ 続きを読む";
+    more.setAttribute("aria-label", open ? "回答をたたむ" : "回答の続きを読む");
+  };
+  more.addEventListener("click", () => { setOpen(ans.classList.contains("clamped")); fitAllGraphs(); });
+  setOpen(false);
+  // 画面に入って高さが決まったら、4 行を超えているかを見てボタンを出す
+  const check = () => { if (ans.classList.contains("clamped")) more.hidden = !(ans.scrollHeight > ans.clientHeight + 2); };
+  if (typeof ResizeObserver === "function") new ResizeObserver(check).observe(ans);
+  else requestAnimationFrame(check);
+  const tags = el("div", { class: "anstags" },
+    el("span", { class: "tag", text: `answerable: ${d.answerable}` }), " ",
+    el("span", { class: "tag " + (d.citations_valid ? "ok" : "ng"), text: `citations_valid: ${d.citations_valid}` }), " ",
+    el("span", { class: "tag " + (d.no_citations ? "ng" : ""), text: `no_citations: ${d.no_citations}` }), " ",
+    el("span", { class: "tag " + (d.uncited_claims ? "ng" : ""), text: `uncited_claims: ${d.uncited_claims}` }), " ",
+    (d.invalid_citation_ids || []).length ? el("span", { class: "tag ng", text: `渡していない ID: ${d.invalid_citation_ids.join(", ")}` }) : null,
+    d.answerable_mismatch ? el("span", { class: "tag ng", text: "answerable と回答が食い違い" }) : null,
+    d.parse_error ? el("span", { class: "tag ng", text: "parse_error" }) : null,
+    d.bedrock_error ? el("span", { class: "tag ng", text: `bedrock_error: ${d.bedrock_error.type || ""}` }) : null,
+    more,
+  );
+  box.appendChild(tags);
+  // 引用は回答の下に折りたたみ(見出しに件数と、引用したチャンク ID を出す)
+  const cites = d.citations || [];
+  if (cites.length) {
+    const ids = [...new Set(cites.flatMap((c) => c.chunk_ids || []))];
+    const det = el("details", { class: "citebox" },
+      el("summary", { text: `引用 ${cites.length} 件(主張 → チャンク → 本文)${ids.length ? " — " + ids.join(", ") : ""}` }));
+    for (const c of cites) {
+      const div = el("div", { class: "cite" }, el("div", { class: "claim", text: c.claim || "(主張なし)" }));
+      if (!(c.chunk_ids || []).length) div.appendChild(el("div", { class: "chunk err", text: "引用なし" }));
+      for (const id of c.chunk_ids || []) {
+        div.appendChild(el("div", { class: "chunk" }, el("b", { text: `[${id}] ` }), chunkText(id)));
+      }
+      det.appendChild(div);
+    }
+    box.appendChild(det);
+  }
+  if (required) {
+    const req = required.required_chunks || [];
+    const collected = new Set((d.chunks || []).map((c) => c.id));
+    const cited = new Set(cites.flatMap((c) => c.chunk_ids || []));
+    box.appendChild(el("p", { class: "muted reqline", text:
+      `模範解答(${required.id}): ${required.answer} / required: ${req.join(", ") || "なし"} / ` +
+      `集めた: ${req.filter((r) => collected.has(r)).length}/${req.length} / 引用: ${req.filter((r) => cited.has(r)).length}/${req.length}` }));
+  }
+  return box;
+}
+let answerSeq = 0;
+
+// ============================================================== 経路(文字)
+function renderPathText(d) {
+  const det = el("details", null, el("summary", { text: "検索の経路(文字で見る)" }));
+  det.appendChild(el("p", { text: `in_scope: ${f2(d.in_scope)}${d.in_scope_overridden ? "(入口ありで続行)" : ""} / stop_reason: ${d.stop_reason}(${STOP_LABEL[d.stop_reason] || ""})${d.halted_at ? " / 打ち切り位置 " + d.halted_at : ""}${d.truncated ? " / 上限で切り捨てあり" : ""}` }));
+  det.appendChild(el("h4", { text: "入口候補" }));
+  if (d.entry_fallback_used) {
+    const fb = GraphModel.entryFallback(d);
+    det.appendChild(el("p", { text: `辞書で入口が見つからなかったので、意味で聞き直した: 種別 ` +
+      `${fb.typeScores.slice(0, 4).map((t) => `${t.type} ${f2(t.score)}`).join(" / ") || "(取れず)"} → ` +
+      `${fb.selectedTypes.join("、") || "なし"}(${fb.nQuestions ?? 0} 件に質問、しきい値 ${f2(fb.threshold)})→ 入口 ${fb.foundBySemantic} 件` }));
+  }
+  const VIA = { dictionary: "辞書", semantic: "意味で聞き直し" };
+  det.appendChild(table(["", "エンティティ", "スコア", "見つけ方"], (d.entry || []).map((e) =>
+    [e.selected ? "→ 選ばれた" : "選外", nameOf(e.id), f2(e.score), VIA[e.via] || "—"]), (r) => r[0] === "選外"));
+  for (const h of d.hops || []) {
+    const src = h.hop > 0 && h.chunk_source ? (h.chunk_source === "edge_evidence" ? " / 関係の根拠チャンクを取得" : " / 登場チャンク上位を取得") : "";
+    det.appendChild(el("h4", { text: (h.hop === 0 ? "ホップ0(入口)" : `ホップ${h.hop}(frontier: ${(h.frontier || []).map(nameOf).join("、")})`) + src }));
+    if (h.hop > 0) {
+      const sel = new Set(h.selected || []);
+      const minScore = d.params ? d.params.min_neighbor_score : null;
+      det.appendChild(table(["", "候補文", "関係", "向き", "スコア"], (h.neighbor_scores || []).map((c) =>
+        [sel.has(c.entity) ? "→" : c.excluded === "below_min" ? belowMinText(minScore) : "", c.sentence, c.edge,
+         directionText(c.direction), f2(c.score)]), (r) => r[0] !== "→"));
+    }
+    det.appendChild(el("p", { class: "muted", text:
+      `進んだノード: ${(h.selected || []).map(nameOf).join("、") || "なし"} / 新しいチャンク: ${(h.new_chunk_ids || []).join(", ") || "なし"}` +
+      `${(h.dropped_chunk_ids || []).length ? " / 捨てた: " + h.dropped_chunk_ids.join(", ") : ""}` +
+      Object.entries(h.capped_chunk_ids || {}).map(([eid, ids]) =>
+        ` / ${nameOf(eid)} の上限あふれ: ${ids.join(", ")}`).join("") +
+      `${(h.hop_capped_chunk_ids || []).length ? ` / ${perHopText(d.params ? d.params.max_chunks_per_hop : null)}。あふれた: ${h.hop_capped_chunk_ids.join(", ")}` : ""}` +
+      ` / 十分性: ${f2(h.sufficiency)}${h.sufficiency_reused ? "(前と同じ)" : ""}` }));
+  }
+  det.appendChild(el("h4", { text: "集めたチャンク" }));
+  det.appendChild(table(["チャンク", "hop", "via_entity", "via_edge", "関係の根拠", "別経路"], (d.chunks || []).map((c) =>
+    [c.id, String(c.hop), nameOf(c.via_entity), c.via_edge || "(入口)", evidenceText(c.evidence_of) || "—",
+     (c.also_via || []).map((a) => `hop${a.hop} ${nameOf(a.entity)}`).join("、")])));
+  return det;
+}
+
+function table(head, rows, isRej) {
+  const t = el("table", null, el("tr", null, head.map((h) => el("th", { text: h }))));
+  for (const r of rows) t.appendChild(el("tr", { class: isRej && isRej(r) ? "rej" : null }, r.map((c) => el("td", { text: c ?? "" }))));
+  return t;
+}
+
+// ============================================================== 時間と費用の内訳(見出しのチップ)
+const COST_BASIS_NOTE = {
+  demo_records: "デモ表示のため今回の費用は $0。金額は保存した実行時の呼び出しレコードから出した目安",
+  demo_tokens: "デモ表示のため今回の費用は $0。金額はトレースのトークン数と単価から出した概算",
+  demo_none: "デモ表示のため今回の費用は $0(元の費用も分かりません)",
+};
+// 右上のヘッダーに「直近の検索: 合計 2.30s / $0.0047(LLM 1.30s $0.0019・Jev 1.00s $0.0026・DDB 0.05s)往復 2.4s」と横棒
+function renderHeaderCost(res) {
+  const box = document.getElementById("lastcost");
+  const d = (res && res.data) || {};
+  const local = d._local || {};
+  box.replaceChildren();
+  if (!d.latency_ms) {
+    box.appendChild(el("span", { class: "muted", text: `直近の検索: ${res && res.status === 200 ? "時間の記録なし" : `失敗 (${res ? res.status : "?"})`}` }));
+    return;
+  }
+  const b = GraphModel.costBreakdown(d, local);
+  const demo = b.costBasis !== "actual";
+  const mark = demo ? "≈" : "";
+  const tok = (v) => (v == null ? "—" : Math.round(v).toLocaleString("ja-JP"));
+  const pct = (v) => (v == null ? "" : ` ${Math.round(v * 100)}%`);
+  const [bed, jev, ddb] = b.parts;
+  const detail = `LLM ${sec(bed.ms)} ${mark}${usd4(bed.usd)}・Jev ${sec(jev.ms)} ${mark}${usd4(jev.usd)}・DDB ${sec(ddb.ms)}`;
+  const title = `${bed.label}: ${sec(bed.ms)}${pct(bed.share)} / ${mark}${usd4(bed.usd)}(入力 ${tok(bed.inputTokens)}・出力 ${tok(bed.outputTokens)}${bed.calls ? `・${bed.calls}回` : ""})\n` +
+                `Jev: ${sec(jev.ms)}${pct(jev.share)} / ${mark}${usd4(jev.usd)}(${jev.calls ?? "—"}回・入力 ${tok(jev.inputTokens)})\n` +
+                `DynamoDB: ${sec(ddb.ms)}${pct(ddb.share)}\n合計(Lambda 内)${sec(b.totalMs)} / 往復(ローカル)${sec(local.wall_ms)}`;
+  box.appendChild(el("span", { title },
+    "直近の検索: ", el("b", { text: `合計 ${sec(b.totalMs)} / ${mark}${usd4(b.totalUsd)}` }), `(${detail})往復 ${sec(local.wall_ms)}`));
+  if (b.totalMs) {
+    const label = b.parts.map((p) => `${p.label}${pct(p.share)}`).join("、") + `、その他${pct(b.otherShare)}`;
+    const bar = el("div", { class: "costbar", role: "img", "aria-label": `合計 ${sec(b.totalMs)} の内訳: ${label}`, title: `合計 ${sec(b.totalMs)}: ${label}` });
+    for (const p of [...b.parts, { key: "other", share: b.otherShare }]) {
+      if (p.share) bar.appendChild(el("span", { class: `c-${p.key}`, style: `width:${(p.share * 100).toFixed(2)}%` }));
+    }
+    box.appendChild(bar);
+  }
+  if (demo) box.appendChild(el("span", { class: "tag", title: COST_BASIS_NOTE[b.costBasis], text: "デモ: 目安" }));
+}
+
+// ============================================================== レイテンシと費用
+function renderLatency(d, local, cost) {
+  const lat = d.latency_ms || {};
+  const box = el("details", null, el("summary", { text: "レイテンシと費用(表で見る)" }));
+  box.appendChild(table(["合計(Lambda 内)", "Jev", "DynamoDB", "Bedrock", "往復(ローカル)", "Jev 呼び出し", "Jev 費用", "Bedrock 費用", "この 1 回"],
+    [[ms(lat.total), ms(lat.jev), ms(lat.ddb), ms(lat.bedrock), ms(local.wall_ms), String(d.jev_calls ?? "—"),
+      usd(cost.jev_usd), usd(cost.gen_usd), usd(cost.total_usd)]]));
+  if (d.cold_start) box.appendChild(el("p", { class: "muted", text: "コールドスタートでした" }));
+  return box;
+}
+
+init();
+</script>
+</body>
+</html>

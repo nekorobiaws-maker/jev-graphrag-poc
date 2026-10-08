@@ -1,0 +1,211 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1500" height="920" viewBox="0 0 1500 920" font-family="'Hiragino Sans', 'Noto Sans JP', sans-serif" role="img" aria-label="Jev 適応ホップ GraphRAG の構成図。登録も検索も判定はすべて Jev の分類スコアで行い、LLM は回答の生成だけに使う。エンベディングは使わない。" xml:lang="ja">
+  <title>Jev 適応ホップ GraphRAG の構成図</title>
+  <desc>上段は登録（ingest）。Lambda に同梱した331件のチャンクと、DynamoDB の graph テーブル PK=MASTER に置いたマスター（ノード種別9・関係12・エンティティ212。60_put_master.py で更新し、デプロイは不要）を ingest Lambda が読み、40チャンクずつ分割して実行する。 1つ目のノード判定は、マスターの名前・別名の辞書でチャンク本文から候補を拾い、候補だけを Jev に「登場するか」と聞く（0.20以上で登場、候補0件なら Jev を呼ばない）。2つ目の関係判定は、許可された組み合わせの候補文を本文が裏付けるかを Jev が判定し（0.55以上で成り立つ）、向きのない関係はペアごとに1回だけ聞く。結果を DynamoDB の jev-graphrag-graph（登場は ENT#x と CHUNK#c、向きのある関係は OUT# と IN#、向きのない関係は両端の SYM#、いずれも根拠チャンクIDを付けて）と jev-graphrag-chunk（本文）に書き込む。 下段は検索（query）。ブラウザの検索画面から、127.0.0.1:8765 のローカル中継サーバーが API キーを付け、予算を確かめ、費用を記録して API Gateway（API キー必須、1日200回まで）に送り、query Lambda が動く。 query Lambda は、1. 前段判定でマスターの辞書から候補を拾い、Jev が in_scope と質問文に書かれているかを判定して入口を決める（0.5以上、最大3）。入口ノードの登場チャンクは、Jev が質問に答える情報を含むかで並べて上位3件を取る。入口が0件のときだけ、Jev が質問の起点の種別を選び、その種別のエンティティに質問の言葉が同じものを指しているかを聞き直す（0.7以上、最大3）。2. 最大3回のホップで、DynamoDB の Query で隣の関係（OUT#・IN#・SYM#）を読み、Jev が答えの手がかりになるかを判定して0.5以上の上位3ノードへ進み、関係の根拠チャンクを1ホップ3件・全体10件まで取り、Jev が答えられるかを判定して0.7以上で止まる。 3. 最後に Amazon Bedrock の Claude Haiku 4.5 が ID 付きチャンクだけを根拠に回答と引用を作り、引用を機械的に検査する。LLM を使うのはこの回答の生成だけで、エンベディングは使わない。35問の評価では1問あたり平均約0.002ドル、Lambda 内で平均約2.5秒。</desc>
+
+  <defs>
+    <!-- AWS 公式アイコン (skill の aws-icon-symbols.svg からコピー。内部 id はプレフィックス付き) -->
+<symbol id="ic-lambda" viewBox="0 0 64 64">
+<g id="lambda--Icon-Architecture_48_Arch_AWS-Lambda_48" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="lambda--Icon-Architecture-BG_48_Compute" fill="#ED7100">
+            <rect id="lambda--Rectangle" x="0" y="0" width="64" height="64"></rect>
+        </g>
+        <path d="M22.6794094,52 L13.5740701,52 L23.8376189,30.41 L28.3997494,39.861 L22.6794094,52 Z M24.7269406,27.667 C24.5606285,27.321 24.2120702,27.103 23.8306478,27.103 L23.8276601,27.103 C23.4452418,27.104 23.0966835,27.325 22.9323632,27.672 L11.0973143,52.569 C10.9499239,52.879 10.9708374,53.243 11.1540795,53.534 C11.3353298,53.824 11.6540117,54 11.9955989,54 L23.309802,54 C23.695208,54 24.0447622,53.777 24.2100784,53.428 L30.4044577,40.284 C30.5329264,40.01 30.5319305,39.692 30.3994783,39.42 L24.7269406,27.667 Z M51.0082382,52 L41.985557,52 L26.9547262,19.578 C26.7914017,19.226 26.4388599,19 26.0524581,19 L20.1279625,19 L20.1349337,12 L31.8146251,12 L46.7747483,44.42 C46.9380728,44.774 47.2906147,45 47.6790082,45 L51.0082382,45 L51.0082382,52 Z M52.0041191,43 L48.3143803,43 L33.354257,10.58 C33.1909326,10.226 32.8383907,10 32.450993,10 L19.1400486,10 C18.5913182,10 18.1451636,10.447 18.1441677,10.999 L18.1362006,19.999 C18.1362006,20.265 18.2407681,20.519 18.4269979,20.707 C18.6142235,20.895 18.8671772,21 19.1310857,21 L25.4170861,21 L40.4479168,53.422 C40.6112413,53.774 40.9627873,54 41.350185,54 L52.0041191,54 C52.5548412,54 53,53.552 53,53 L53,44 C53,43.448 52.5548412,43 52.0041191,43 L52.0041191,43 Z" id="lambda--AWS-Lambda_Icon_48_Squid" fill="#FFFFFF"></path>
+    </g>
+  </symbol>
+<symbol id="ic-dynamodb" viewBox="0 0 64 64">
+<g id="dynamodb--Icon-Architecture_48_Arch_Amazon-DynamoDB_48" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="dynamodb--Icon-Architecture-BG_48_Database" fill="#C925D1">
+            <rect id="dynamodb--Rectangle" x="0" y="0" width="64" height="64"></rect>
+        </g>
+        <path d="M46.5858287,25.2492763 L43.0008475,25.2492763 C42.6728493,25.2492763 42.3658509,25.086523 42.1788519,24.8145936 C41.9918528,24.5416533 41.9488531,24.1939071 42.0648525,23.8835638 L44.5578394,17.162156 L35.6448862,17.162156 L31.5539077,26.2601663 L36.0008843,26.2601663 C36.3218827,26.2601663 36.6238811,26.4158434 36.8128801,26.6806966 C36.9998791,26.943528 37.0518788,27.2821762 36.9488794,27.5904976 L33.2888986,38.6910812 L46.5858287,25.2492763 Z M49.7068123,24.9530855 L31.7079069,43.1491063 C31.5159079,43.3442081 31.2589093,43.4452971 31.0009106,43.4452971 C30.8189116,43.4452971 30.6379125,43.3957635 30.4759134,43.2946744 C30.0809155,43.0480173 29.9049164,42.5597574 30.0529156,42.1149658 L34.6128916,28.2819464 L30.0009159,28.2819464 C29.6609177,28.2819464 29.3449193,28.1070624 29.1599203,27.8189588 C28.9769213,27.5288333 28.9499214,27.1659238 29.0909207,26.8525479 L34.0908944,15.7327574 C34.2528935,15.3718697 34.6078917,15.1403759 35.0008896,15.1403759 L46.0008318,15.1403759 C46.32883,15.1403759 46.6358284,15.3031292 46.8228274,15.5750586 C47.0098265,15.8479989 47.0528262,16.1957451 46.9378268,16.5060883 L44.44384,23.2274962 L48.999816,23.2274962 C49.4038139,23.2274962 49.769812,23.4741534 49.9238111,23.8512154 C50.0788103,24.2292882 49.9928108,24.663971 49.7068123,24.9530855 L49.7068123,24.9530855 Z M41.0008581,44.2196388 C38.2908723,46.1059597 33.3138985,47.1016863 28.5329236,47.1016863 C23.7169489,47.1016863 18.6959753,46.0928181 15.9999895,44.1781923 L16.0009895,47.9943023 C16.0009895,49.6582273 20.7689644,51.9782199 28.5329236,51.9782199 C36.0278842,51.9782199 41.0008581,49.2761108 41.0008581,47.4888572 L41.0008581,44.2196388 Z M43.0648472,40.9504204 C43.0648472,41.1374351 43.0328474,41.3173735 43.0008475,41.4963011 L43.0008475,47.4888572 C43.0008475,51.0795387 36.5108817,54 28.5329236,54 C21.6299599,54 14.6619965,52.1106465 14.0599997,48.4997473 L14.001,48.4997473 L14,43.4452971 L14,30.3037265 L14,16.1512659 L14.001,16.1512659 C14.001,12.1552176 21.4879606,10 28.5329236,10 C32.4739029,10 36.262883,10.6398934 38.9298689,11.755916 L38.163873,13.6240408 C35.7318858,12.6050636 32.2209042,12.0217801 28.5329236,12.0217801 C20.7689644,12.0217801 16.0009895,14.4266875 16.0009895,16.1512659 C16.0009895,17.8758443 20.7689644,20.2807517 28.5329236,20.2807517 C28.7279226,20.2807517 28.9319215,20.2817626 29.1289205,20.2736755 L29.2069201,22.2934338 C28.9819212,22.3025318 28.7579224,22.3025318 28.5329236,22.3025318 C23.7159489,22.3025318 18.6959753,21.2936636 15.9999895,19.3790378 L15.9999895,23.7369848 L16.0009895,23.7369848 L16.0009895,23.7541699 C16.0059895,24.2838763 16.4899869,24.8974866 17.3649823,25.4736939 C19.3469719,26.7615678 22.9149531,27.642053 26.9039322,27.8250241 L26.8129326,29.8447824 C22.6869543,29.6547351 19.0629734,28.7762717 16.7269857,27.4287552 C16.4169873,27.7269678 16.0009895,28.4851353 16.0009895,28.8955567 C16.0009895,30.6201351 20.7689644,33.0250425 28.5329236,33.0250425 C29.2709197,33.0250425 29.9979159,32.9997703 30.6949122,32.9502366 L30.8359115,34.9669623 C30.0919154,35.0205394 29.3169195,35.0468226 28.5329236,35.0468226 C23.7159489,35.0468226 18.6959753,34.0379543 15.9999895,32.1233286 L15.9999895,35.7928594 L16.0009895,35.7928594 C16.0059895,36.339751 16.4899869,36.9533612 17.3649823,37.5295685 C19.6329704,39.0044571 23.9139479,39.9233562 28.5329236,39.9233562 L28.8629219,39.9233562 L28.8629219,41.9451362 L28.5329236,41.9451362 C23.7549487,41.9451362 18.6729754,40.9372789 16.0009895,39.4017369 C15.6789912,39.6999495 16.0009895,40.4126269 16.0009895,40.9504204 C16.0009895,42.6749989 20.7689644,45.0799063 28.5329236,45.0799063 C36.2978828,45.0799063 41.0648577,42.6749989 41.0648577,40.9504204 C41.0648577,40.3408537 40.4658609,39.7757662 39.9728635,39.4118458 C39.5638656,39.658503 39.113868,39.8950512 38.6008707,40.1113817 L37.8328747,38.2442678 C38.3638719,38.0208611 38.8228695,37.7812802 39.1968675,37.5326012 C40.2978617,36.798695 41.0008581,35.7544456 41.0008581,35.3581767 L43.0008475,35.3581767 C43.0008475,36.2983045 42.3798508,37.3051509 41.583855,38.1330699 C42.7758487,39.1732757 43.0648472,40.2114598 43.0648472,40.9504204 L43.0648472,40.9504204 Z M17.1419835,48.3885494 C17.9329793,48.796949 18.8579745,49.1608694 19.893969,49.4691908 L20.457966,47.5292928 C19.5419709,47.2573634 18.7319751,46.9399439 18.0519787,46.5881542 L17.1419835,48.3885494 Z M19.893969,37.3385103 L20.457966,35.3996232 C19.5419709,35.1266829 18.7319751,34.8102743 18.0519787,34.4584846 L17.1419835,36.2578689 C17.9329793,36.6672793 18.8579745,37.0301889 19.893969,37.3385103 L19.893969,37.3385103 Z M17.1419835,24.1281992 L18.0519787,22.3278041 C18.7319751,22.6795938 19.5419709,22.9960024 20.457966,23.2689427 L19.893969,25.2088407 C18.8579745,24.9005192 17.9329793,24.5365988 17.1419835,24.1281992 L17.1419835,24.1281992 Z" id="dynamodb--Amazon-DynamoDB_Icon_48_Squid" fill="#FFFFFF"></path>
+    </g>
+  </symbol>
+<symbol id="ic-apigateway" viewBox="0 0 64 64">
+    <g id="apigateway--Icon-Architecture_48_Arch_Amazon-API-Gateway_48">
+      <g id="apigateway--Icon-Architecture-BG_48_Networking-Content-Delivery">
+        <rect id="apigateway--Rectangle" width="64" height="64" fill="#8C4FFF"/>
+      </g>
+      <g id="apigateway--Icon-Service_48_Amazon-API-Gateway_48">
+        <path id="apigateway--Amazon-API-Gateway_Icon_48_Squid" fill-rule="evenodd" clip-rule="evenodd" d="M28 43.9999H31V41.9999H28V43.9999ZM33 43.9999H36V41.9999H33V43.9999ZM28 21.9998H31V19.9998H28V21.9998ZM33 21.9998H36V19.9998H33V21.9998ZM22 12.7408L12 18.5738V46.382L22 51.382V12.7408ZM24 19.9998H26V21.9998H24V41.9999H26V43.9999H24V53C24 53.347 23.82 53.668 23.525 53.851C23.365 53.95 23.183 54 23 54C22.847 54 22.694 53.965 22.553 53.895L10.553 47.895C10.214 47.725 10 47.379 10 47V17.9998C10 17.6448 10.188 17.3148 10.496 17.1358L22.496 10.1358C22.805 9.95575 23.188 9.95475 23.498 10.1328C23.809 10.3108 24 10.6418 24 10.9998V19.9998ZM52 18.5738L42 12.7408V51.382L52 46.382V18.5738ZM54 17.9998V47C54 47.379 53.786 47.725 53.447 47.895L41.447 53.895C41.306 53.965 41.153 54 41 54C40.817 54 40.635 53.95 40.475 53.851C40.18 53.668 40 53.347 40 53V43.9999H38V41.9999H40V21.9998H38V19.9998H40V10.9998C40 10.6418 40.191 10.3108 40.502 10.1328C40.812 9.95575 41.195 9.95575 41.504 10.1358L53.504 17.1358C53.812 17.3148 54 17.6448 54 17.9998ZM34.939 27.3419L33.061 26.6578L29.061 37.6579L30.939 38.3419L34.939 27.3419ZM39.707 32.7069C40.098 32.3159 40.098 31.6839 39.707 31.2929L36.707 28.2929L35.293 29.7069L37.586 31.9999L35.293 34.2929L36.707 35.7069L39.707 32.7069ZM27.293 35.7069L24.293 32.7069C23.902 32.3159 23.902 31.6839 24.293 31.2929L27.293 28.2929L28.707 29.7069L26.414 31.9999L28.707 34.2929L27.293 35.7069Z" fill="white"/>
+      </g>
+    </g>
+  </symbol>
+<symbol id="ic-bedrock" viewBox="0 0 64 64">
+<g id="bedrock--Icon-Architecture_48_Arch_Amazon-Bedrock_48" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="bedrock--Icon-Architecture-BG_48_Machine-Learning" fill="#01A88D">
+            <rect id="bedrock--Rectangle" x="0" y="0" width="64" height="64"></rect>
+        </g>
+        <g id="bedrock--Icon-Service_48_Amazon-Bedrock_48" transform="translate(10.000000, 10.000000)" fill="#FFFFFF">
+            <path d="M41,20.9998818 C40.448,20.9998818 40,20.5508818 40,19.9998818 C40,19.4488818 40.448,18.9998818 41,18.9998818 C41.552,18.9998818 42,19.4488818 42,19.9998818 C42,20.5508818 41.552,20.9998818 41,20.9998818 L41,20.9998818 Z M16.977,41.8478818 L13.774,40.1018818 L17.515,37.8568818 L16.485,36.1428818 L11.738,38.9908818 L7,36.4058818 L7,30.5658818 L11.515,27.8568818 L10.485,26.1428818 L6,28.8338818 L2,26.4338818 L2,22.6178818 L7.447,19.8948818 L6.553,18.1048818 L2,20.3818818 L2,17.6178818 L6.956,15.1398818 L11,17.5658818 L11,20.3818818 L7.553,22.1048818 L8.447,23.8948818 L12.003,22.1168818 L15.557,23.8768818 L16.443,22.0848818 L13,20.3798818 L13,17.5658818 L17.515,14.8568818 C17.815,14.6768818 18,14.3508818 18,13.9998818 L18,8.99988178 L16,8.99988178 L16,13.4338818 L12,15.8338818 L8,13.4338818 L8,6.58788178 L11,4.92188178 L11,10.9998818 L13,10.9998818 L13,3.81088178 L16.024,2.12988178 L21.002,4.61588178 L21.001,26.4498818 L10.463,33.1558818 L11.537,34.8438818 L21.001,28.8218818 L21,39.4338818 L16.977,41.8478818 Z M38,28.9998818 C38.552,28.9998818 39,29.4488818 39,29.9998818 C39,30.5508818 38.552,30.9998818 38,30.9998818 C37.448,30.9998818 37,30.5508818 37,29.9998818 C37,29.4488818 37.448,28.9998818 38,28.9998818 L38,28.9998818 Z M30,38.9998818 C29.448,38.9998818 29,38.5508818 29,37.9998818 C29,37.4488818 29.448,36.9998818 30,36.9998818 C30.552,36.9998818 31,37.4488818 31,37.9998818 C31,38.5508818 30.552,38.9998818 30,38.9998818 L30,38.9998818 Z M32,5.99988178 C32.552,5.99988178 33,6.44888178 33,6.99988178 C33,7.55088178 32.552,7.99988178 32,7.99988178 C31.448,7.99988178 31,7.55088178 31,6.99988178 C31,6.44888178 31.448,5.99988178 32,5.99988178 L32,5.99988178 Z M41,16.9998818 C39.698,16.9998818 38.598,17.8388818 38.184,18.9998818 L23.001,18.9998818 L23.001,14.9998818 L32,14.9998818 C32.553,14.9998818 33,14.5518818 33,13.9998818 L33,9.81588178 C34.161,9.40188178 35,8.30188178 35,6.99988178 C35,5.34588178 33.654,3.99988178 32,3.99988178 C30.346,3.99988178 29,5.34588178 29,6.99988178 C29,8.30188178 29.839,9.40188178 31,9.81588178 L31,12.9998818 L23.001,12.9998818 L23.002,3.99788178 C23.002,3.61888178 22.788,3.27288178 22.449,3.10388178 L16.447,0.104881781 C16.151,-0.0421182195 15.803,-0.0341182195 15.515,0.125881781 L6.515,5.12588178 C6.197,5.30188178 6,5.63688178 6,5.99988178 L6,13.3818818 L0.553,16.1048818 C0.214,16.2748818 0,16.6208818 0,16.9998818 L0,26.9998818 C0,27.3508818 0.185,27.6768818 0.485,27.8568818 L5,30.5658818 L5,36.9998818 C5,37.3658818 5.2,37.7028818 5.521,37.8778818 L16.521,43.8778818 C16.671,43.9588818 16.835,43.9998818 17,43.9998818 C17.179,43.9998818 17.356,43.9518818 17.515,43.8568818 L22.515,40.8568818 C22.815,40.6768818 23,40.3508818 23,39.9998818 L23,32.9998818 L29,32.9998818 L29,35.1838818 C27.839,35.5978818 27,36.6978818 27,37.9998818 C27,39.6538818 28.346,40.9998818 30,40.9998818 C31.654,40.9998818 33,39.6538818 33,37.9998818 C33,36.6978818 32.161,35.5978818 31,35.1838818 L31,31.9998818 C31,31.4478818 30.553,30.9998818 30,30.9998818 L23,30.9998818 L23.001,26.9998818 L33.586,26.9998818 L35.301,28.7148818 C35.113,29.1058818 35,29.5378818 35,29.9998818 C35,31.6538818 36.346,32.9998818 38,32.9998818 C39.654,32.9998818 41,31.6538818 41,29.9998818 C41,28.3458818 39.654,26.9998818 38,26.9998818 C37.538,26.9998818 37.106,27.1128818 36.715,27.3008818 L34.707,25.2928818 C34.52,25.1048818 34.266,24.9998818 34,24.9998818 L23.001,24.9998818 L23.001,20.9998818 L38.184,20.9998818 C38.598,22.1608818 39.698,22.9998818 41,22.9998818 C42.654,22.9998818 44,21.6538818 44,19.9998818 C44,18.3458818 42.654,16.9998818 41,16.9998818 L41,16.9998818 Z" id="bedrock--Fill-3"></path>
+        </g>
+    </g>
+  </symbol>
+    <!-- 自作アイコン (AWS 外: Jev / ブラウザ / 中継サーバー / チャンク) -->
+
+<symbol id="ic-jev" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2E5AAC"/><path d="M14 40 A18 18 0 0 1 50 40" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/><path d="M32 40 L43 27" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/><circle cx="32" cy="40" r="3.5" fill="#FFFFFF"/><text x="32" y="56" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF" font-family="Helvetica, Arial, sans-serif">0–1</text></symbol>
+<symbol id="ic-browser" viewBox="0 0 64 64"><rect width="64" height="64" fill="#E9EEF3"/><rect x="10" y="14" width="44" height="36" rx="3" fill="#FFFFFF" stroke="#5A6B7B" stroke-width="2.5"/><path d="M10 23 H54" stroke="#5A6B7B" stroke-width="2.5"/><circle cx="15" cy="18.5" r="1.6" fill="#5A6B7B"/><circle cx="20" cy="18.5" r="1.6" fill="#5A6B7B"/><circle cx="25" cy="18.5" r="1.6" fill="#5A6B7B"/><circle cx="22" cy="37" r="3" fill="#5A6B7B"/><circle cx="42" cy="31" r="3" fill="#5A6B7B"/><circle cx="40" cy="44" r="3" fill="#5A6B7B"/><path d="M22 37 L42 31 M22 37 L40 44" stroke="#5A6B7B" stroke-width="1.8"/></symbol>
+<symbol id="ic-relay" viewBox="0 0 64 64"><rect width="64" height="64" fill="#E9EEF3"/><rect x="14" y="13" width="36" height="14" rx="2.5" fill="#FFFFFF" stroke="#5A6B7B" stroke-width="2.5"/><rect x="14" y="31" width="36" height="14" rx="2.5" fill="#FFFFFF" stroke="#5A6B7B" stroke-width="2.5"/><circle cx="20" cy="20" r="1.8" fill="#5A6B7B"/><circle cx="20" cy="38" r="1.8" fill="#5A6B7B"/><path d="M27 20 H44 M27 38 H44" stroke="#5A6B7B" stroke-width="2"/><path d="M32 45 V53 M22 53 H42" stroke="#5A6B7B" stroke-width="2.5"/></symbol>
+<symbol id="ic-doc" viewBox="0 0 64 64"><rect width="64" height="64" fill="#E9EEF3"/><path d="M18 10 H38 L48 20 V54 H18 Z" fill="#FFFFFF" stroke="#5A6B7B" stroke-width="2.5" stroke-linejoin="round"/><path d="M38 10 V20 H48" fill="none" stroke="#5A6B7B" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 28 H42 M24 35 H42 M24 42 H36" stroke="#5A6B7B" stroke-width="2.2"/></symbol>
+    <!-- 矢印マーカー (色ごとに別 id) -->
+    <marker id="arw-dark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3F4A5A"/></marker>
+    <marker id="arw-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8A96A3"/></marker>
+    <marker id="arw-jev" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2E5AAC"/></marker>
+    <marker id="arw-llm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6B3FA0"/></marker>
+    <marker id="arw-sub" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5A6B7B"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1500" height="920" fill="#FFFFFF"/>
+  <text x="750" y="46" font-size="30" text-anchor="middle" font-weight="700" fill="#232F3E">Jev 適応ホップ GraphRAG の構成</text>
+  <text x="750" y="76" font-size="14.5" text-anchor="middle" fill="#6B7280">判定はすべて Jev（分類モデル）、LLM（Claude Haiku 4.5）は回答の生成だけ。エンベディングは使わない</text>
+  <path d="M1180,26 H1206" stroke="#2E5AAC" stroke-width="2.5"/>
+  <text x="1212" y="30" font-size="12" fill="#39485A">Jev の判定</text>
+  <path d="M1346,26 H1372" stroke="#6B3FA0" stroke-width="2.5"/>
+  <text x="1378" y="30" font-size="12" fill="#39485A">LLM の生成</text>
+  <path d="M1180,48 H1206" stroke="#3F4A5A" stroke-width="2.5"/>
+  <text x="1212" y="52" font-size="12" fill="#39485A">DynamoDB 読み書き</text>
+  <path d="M1346,48 H1372" stroke="#8A96A3" stroke-width="2.5" stroke-dasharray="5,4"/>
+  <text x="1378" y="52" font-size="12" fill="#39485A">HTTP</text>
+  <!-- ===== 上段: 登録 ===== -->
+  <rect x="24" y="92" width="1452" height="332" rx="14" fill="#FAFAFA" stroke="#D5DBE1" stroke-width="1.4" stroke-dasharray="7,4"/>
+  <text x="44" y="119" font-size="19" font-weight="700" fill="#232F3E">登録（ingest）</text>
+  <text x="196" y="118" font-size="12.5" fill="#5A6B7B">チャンクごとに Jev が「登場するエンティティ」と「成り立つ関係」を選び、グラフに書き込む（手動で1回）</text>
+  <rect x="48" y="140" width="290" height="96" rx="10" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-doc" xlink:href="#ic-doc" x="62" y="154" width="44" height="44"/>
+  <text x="118" y="170" font-size="16" font-weight="700" fill="#232F3E">チャンク 331件</text>
+  <text x="118" y="193" font-size="12.5" fill="#6B7280">ingest の zip に同梱</text>
+  <text x="118" y="213" font-size="12.5" fill="#6B7280">40件ずつ処理</text>
+  <rect x="48" y="252" width="290" height="160" rx="10" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-dynamodb" xlink:href="#ic-dynamodb" x="62" y="266" width="44" height="44"/>
+  <text x="118" y="284" font-size="13.5" font-weight="700" fill="#232F3E">マスター（軽量オントロジー）</text>
+  <text x="62" y="330" font-size="12.5" fill="#39485A">graph テーブルの PK=MASTER</text>
+  <text x="62" y="352" font-size="12.5" fill="#39485A">種別9・関係12・エンティティ212</text>
+  <text x="62" y="374" font-size="12.5" fill="#6B7280">60_put_master.py で更新</text>
+  <text x="62" y="394" font-size="12.5" fill="#6B7280">（デプロイ不要）</text>
+  <path d="M338,188 H432" fill="none" stroke="#3F4A5A" stroke-width="2" marker-end="url(#arw-dark)"/>
+  <text x="385" y="179" font-size="12" text-anchor="middle" fill="#232F3E">本文</text>
+  <path d="M338,330 H432" fill="none" stroke="#3F4A5A" stroke-width="2" marker-end="url(#arw-dark)"/>
+  <text x="385" y="321" font-size="12" text-anchor="middle" fill="#232F3E">マスター</text>
+  <rect x="440" y="160" width="220" height="228" rx="12" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-lambda" xlink:href="#ic-lambda" x="520" y="186" width="60" height="60"/>
+  <text x="550" y="276" font-size="16" text-anchor="middle" font-weight="700" fill="#232F3E">AWS Lambda</text>
+  <text x="550" y="298" font-size="13" text-anchor="middle" fill="#39485A">ingest（登録）</text>
+  <text x="550" y="328" font-size="12.5" text-anchor="middle" fill="#6B7280">40チャンクずつ</text>
+  <text x="550" y="347" font-size="12.5" text-anchor="middle" fill="#6B7280">分割して Invoke</text>
+  <path d="M660,196 H738" fill="none" stroke="#2E5AAC" stroke-width="2" marker-end="url(#arw-jev)"/>
+  <text x="699" y="187" font-size="12" text-anchor="middle" fill="#1B3E7D">判定を依頼</text>
+  <path d="M738,232 H662" fill="none" stroke="#2E5AAC" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arw-jev)"/>
+  <text x="699" y="250" font-size="12" text-anchor="middle" fill="#1B3E7D">スコア</text>
+  <path d="M660,352 H750" fill="none" stroke="#3F4A5A" stroke-width="2" marker-end="url(#arw-dark)"/>
+  <text x="699" y="343" font-size="12" text-anchor="middle" fill="#232F3E">書き込む</text>
+  <rect x="740" y="134" width="716" height="142" rx="12" fill="#EEF4FC" stroke="#2E5AAC" stroke-width="1.6" stroke-dasharray="7,4"/>
+  <use href="#ic-jev" xlink:href="#ic-jev" x="758" y="150" width="44" height="44"/>
+  <text x="758" y="222" font-size="15" font-weight="700" fill="#1B3E7D">Jev（TypeSafe AI）</text>
+  <text x="758" y="242" font-size="12" fill="#5A6B7B">分類モデル・AWS の外</text>
+  <rect x="960" y="146" width="236" height="118" rx="9" fill="#FFFFFF" stroke="#2E5AAC" stroke-width="1.2"/>
+  <text x="974" y="169" font-size="14" font-weight="700" fill="#1B3E7D">① ノード判定</text>
+  <text x="974" y="192" font-size="13" fill="#39485A">辞書で本文から候補を拾い</text>
+  <text x="974" y="210" font-size="13" fill="#39485A">候補だけ「登場するか？」</text>
+  <text x="974" y="246" font-size="12.5" font-weight="700" fill="#2E5AAC">0.20 以上で「登場」</text>
+  <rect x="1208" y="146" width="236" height="118" rx="9" fill="#FFFFFF" stroke="#2E5AAC" stroke-width="1.2"/>
+  <text x="1222" y="169" font-size="14" font-weight="700" fill="#1B3E7D">② 関係判定</text>
+  <text x="1222" y="192" font-size="13" fill="#39485A">本文が候補文を裏付けるか？</text>
+  <text x="1222" y="210" font-size="13" fill="#39485A">許可された組み合わせだけ</text>
+  <text x="1222" y="232" font-size="12" fill="#5A6B7B">向きなしの関係はペアで1回</text>
+  <text x="1222" y="252" font-size="12.5" font-weight="700" fill="#2E5AAC">0.55 以上で「成り立つ」</text>
+  <rect x="740" y="290" width="716" height="122" rx="12" fill="#FFFFFF" stroke="#9CA3AF" stroke-width="1.4" stroke-dasharray="7,4"/>
+  <use href="#ic-dynamodb" xlink:href="#ic-dynamodb" x="754" y="297" width="22" height="22"/>
+  <text x="784" y="313" font-size="13" font-weight="700" fill="#232F3E">Amazon DynamoDB（オンデマンド）</text>
+  <rect x="752" y="322" width="430" height="82" rx="9" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.2"/>
+  <text x="766" y="344" font-size="14" font-weight="700" font-family="Menlo, Consolas, monospace" fill="#232F3E">jev-graphrag-graph</text>
+  <text x="766" y="366" font-size="12.5" fill="#39485A">登場：ENT#x / CHUNK#c（スコア付き）</text>
+  <text x="766" y="387" font-size="12.5" fill="#39485A">関係：OUT#… / IN#… / SYM#…（＋根拠チャンクID）</text>
+  <rect x="1194" y="322" width="250" height="82" rx="9" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.2"/>
+  <text x="1208" y="344" font-size="14" font-weight="700" font-family="Menlo, Consolas, monospace" fill="#232F3E">jev-graphrag-chunk</text>
+  <text x="1208" y="366" font-size="12.5" fill="#39485A">チャンクの本文</text>
+  <text x="1208" y="387" font-size="12.5" fill="#6B7280">検索時に BatchGet で読む</text>
+  <!-- ===== 下段: 検索 ===== -->
+  <rect x="24" y="440" width="1452" height="446" rx="14" fill="#FAFAFA" stroke="#D5DBE1" stroke-width="1.4" stroke-dasharray="7,4"/>
+  <text x="44" y="467" font-size="19" font-weight="700" fill="#232F3E">検索（query）</text>
+  <text x="184" y="466" font-size="12.5" fill="#5A6B7B">質問ごとに Jev が入口・進む先・止めどきを決め、最後に LLM が回答する</text>
+  <rect x="40" y="486" width="250" height="102" rx="10" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-browser" xlink:href="#ic-browser" x="54" y="500" width="44" height="44"/>
+  <text x="108" y="518" font-size="16" font-weight="700" fill="#232F3E">ブラウザ</text>
+  <text x="108" y="541" font-size="12.5" fill="#39485A">検索画面・グラフ図</text>
+  <text x="108" y="561" font-size="12.5" fill="#6B7280">経路と引用を表示</text>
+  <path d="M120,590 V618" fill="none" stroke="#8A96A3" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arw-gray)" marker-start="url(#arw-gray)"/>
+  <text x="134" y="608" font-size="12" fill="#5A6B7B">質問 / 回答</text>
+  <rect x="40" y="620" width="250" height="116" rx="10" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-relay" xlink:href="#ic-relay" x="54" y="634" width="44" height="44"/>
+  <text x="108" y="652" font-size="15" font-weight="700" fill="#232F3E">ローカル中継サーバー</text>
+  <text x="108" y="674" font-size="12" font-family="Menlo, Consolas, monospace" fill="#39485A">127.0.0.1:8765</text>
+  <text x="108" y="696" font-size="12.5" fill="#39485A">API キーを付与</text>
+  <text x="108" y="716" font-size="12.5" fill="#39485A">予算チェック・費用記録</text>
+  <path d="M120,738 V766" fill="none" stroke="#8A96A3" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arw-gray)" marker-start="url(#arw-gray)"/>
+  <text x="134" y="756" font-size="12" fill="#5A6B7B">キー付きで転送</text>
+  <rect x="40" y="768" width="250" height="88" rx="10" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-apigateway" xlink:href="#ic-apigateway" x="54" y="782" width="44" height="44"/>
+  <text x="108" y="798" font-size="15" font-weight="700" fill="#232F3E">Amazon API Gateway</text>
+  <text x="108" y="820" font-size="12.5" fill="#39485A">API キー必須</text>
+  <text x="108" y="840" font-size="12.5" fill="#6B7280">200回/日・1回/秒</text>
+  <path d="M292,812 H316 V506 H338" fill="none" stroke="#8A96A3" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arw-gray)" marker-start="url(#arw-gray)"/>
+  <rect x="340" y="486" width="720" height="390" rx="12" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.6"/>
+  <path d="M340,526 V498 A12,12 0 0 1 352,486 H1048 A12,12 0 0 1 1060,498 V526 Z" fill="#F3F4F6"/>
+  <path d="M340,526 H1060" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-lambda" xlink:href="#ic-lambda" x="354" y="492" width="28" height="28"/>
+  <text x="392" y="513" font-size="16" fill="#39485A"><tspan font-weight="700" fill="#232F3E">AWS Lambda query</tspan>（検索ループと回答）</text>
+  <rect x="806" y="494" width="242" height="24" rx="12" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.2"/>
+  <text x="1037" y="511" font-size="12" text-anchor="end" fill="#232F3E">1問 平均 約 $0.002・約2.5秒</text>
+  <rect x="352" y="532" width="696" height="114" rx="8" fill="#F8FAFC" stroke="#E5E7EB" stroke-width="1.2"/>
+  <circle cx="374" cy="552" r="11" fill="#232F3E"/>
+  <text x="374" y="556.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">1</text>
+  <text x="394" y="557" font-size="14.5" font-weight="700" fill="#232F3E">前段判定：入口を決める</text>
+  <text x="394" y="579" font-size="13" fill="#39485A">マスターの名前・別名の辞書で候補を拾う（文字列照合、Jev なし）</text>
+  <text x="394" y="599" font-size="13" fill="#39485A"><tspan font-weight="700" fill="#2E5AAC">Jev</tspan> が in_scope と「質問文に書かれているか」を判定 → 入口は 0.5 以上・最大3</text>
+  <text x="394" y="619" font-size="13" fill="#39485A">入口が0件なら <tspan font-weight="700" fill="#2E5AAC">Jev</tspan> が種別を選び、その種別に「同じものを指すか」を聞き直す（0.7 以上）</text>
+  <text x="394" y="638" font-size="13" fill="#39485A">入口ノードの登場チャンクを <tspan font-weight="700" fill="#2E5AAC">Jev</tspan> が「答える情報を含むか」で並べ、上位3件を取る</text>
+  <rect x="352" y="654" width="696" height="118" rx="8" fill="#F8FAFC" stroke="#E5E7EB" stroke-width="1.2"/>
+  <circle cx="374" cy="674" r="11" fill="#232F3E"/>
+  <text x="374" y="678.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">2</text>
+  <text x="394" y="679" font-size="14.5" font-weight="700" fill="#232F3E">ホップ（最大3回）：隣へ進むか・止めるか</text>
+  <text x="394" y="701" font-size="13" fill="#39485A"><tspan font-weight="700" fill="#232F3E">DynamoDB</tspan> の Query で隣の関係を読む（OUT# / IN# / SYM#）</text>
+  <text x="394" y="722" font-size="13" fill="#39485A"><tspan font-weight="700" fill="#2E5AAC">Jev</tspan> 「答えの手がかりになるか」→ 0.5 以上の上位3ノードへ進む</text>
+  <text x="394" y="743" font-size="13" fill="#39485A">たどった関係の根拠チャンクを取る（1ホップ3件・全体10件まで）</text>
+  <text x="394" y="764" font-size="13" fill="#39485A"><tspan font-weight="700" fill="#2E5AAC">Jev</tspan> 「これで答えられるか」→ 0.7 以上で停止、未満なら次へ</text>
+  <path d="M988,760 H1012 V700 H994" fill="none" stroke="#5A6B7B" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#arw-sub)"/>
+  <text x="1030" y="706" text-anchor="middle" font-size="11.5" fill="#5A6B7B">く</text>
+  <text x="1030" y="720" text-anchor="middle" font-size="11.5" fill="#5A6B7B">り</text>
+  <text x="1030" y="734" text-anchor="middle" font-size="11.5" fill="#5A6B7B">返</text>
+  <text x="1030" y="748" text-anchor="middle" font-size="11.5" fill="#5A6B7B">す</text>
+  <rect x="352" y="780" width="696" height="86" rx="8" fill="#F5F0FC" stroke="#D9C8EE" stroke-width="1.2"/>
+  <circle cx="374" cy="800" r="11" fill="#6B3FA0"/>
+  <text x="374" y="804.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">3</text>
+  <text x="394" y="805" font-size="14.5" font-weight="700" fill="#6B3FA0">回答：根拠つきで答える</text>
+  <text x="394" y="828" font-size="13" fill="#39485A"><tspan font-weight="700" fill="#6B3FA0">Bedrock Claude Haiku 4.5</tspan> が ID 付きチャンクだけを根拠に回答＋引用</text>
+  <text x="394" y="849" font-size="13" fill="#39485A">引用した ID が渡したチャンクに含まれるかを機械的に検査</text>
+  <path d="M1062,598 H1118" fill="none" stroke="#2E5AAC" stroke-width="2" marker-end="url(#arw-jev)" marker-start="url(#arw-jev)"/>
+  <path d="M1062,680 H1118" fill="none" stroke="#2E5AAC" stroke-width="2" marker-end="url(#arw-jev)" marker-start="url(#arw-jev)"/>
+  <path d="M1062,742 H1118" fill="none" stroke="#3F4A5A" stroke-width="2" marker-end="url(#arw-dark)" marker-start="url(#arw-dark)"/>
+  <path d="M1062,830 H1118" fill="none" stroke="#6B3FA0" stroke-width="2.4" marker-end="url(#arw-llm)" marker-start="url(#arw-llm)"/>
+  <rect x="1120" y="486" width="336" height="210" rx="12" fill="#EEF4FC" stroke="#2E5AAC" stroke-width="1.6" stroke-dasharray="7,4"/>
+  <use href="#ic-jev" xlink:href="#ic-jev" x="1136" y="500" width="40" height="40"/>
+  <text x="1188" y="518" font-size="15" font-weight="700" fill="#1B3E7D">Jev（TypeSafe AI）</text>
+  <text x="1188" y="537" font-size="12" fill="#5A6B7B">分類モデル・AWS の外</text>
+  <text x="1138" y="568" font-size="12.5" fill="#39485A">・in_scope（作品についての質問か）</text>
+  <text x="1138" y="590" font-size="12.5" fill="#39485A">・質問文に名前が書かれているか</text>
+  <text x="1138" y="612" font-size="12.5" fill="#39485A">・入口0件なら：種別／同じものを指すか</text>
+  <text x="1138" y="634" font-size="12.5" fill="#39485A">・答えの手がかりになるか</text>
+  <text x="1138" y="656" font-size="12.5" fill="#39485A">・これで答えられるか（十分性）</text>
+  <text x="1138" y="684" font-size="12" font-weight="700" fill="#2E5AAC">返すのは 0〜1 のスコアだけ</text>
+  <rect x="1120" y="706" width="336" height="74" rx="10" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1.5"/>
+  <use href="#ic-dynamodb" xlink:href="#ic-dynamodb" x="1134" y="721" width="44" height="44"/>
+  <text x="1190" y="728" font-size="15" font-weight="700" fill="#232F3E">Amazon DynamoDB</text>
+  <text x="1190" y="749" font-size="12" fill="#39485A">graph：マスター・登場・関係</text>
+  <text x="1190" y="768" font-size="12" fill="#6B7280">chunk：本文を BatchGet</text>
+  <rect x="1120" y="792" width="336" height="84" rx="10" fill="#F5F0FC" stroke="#6B3FA0" stroke-width="2.2"/>
+  <use href="#ic-bedrock" xlink:href="#ic-bedrock" x="1134" y="812" width="44" height="44"/>
+  <text x="1190" y="826" font-size="15" font-weight="700" fill="#6B3FA0">Amazon Bedrock</text>
+  <rect x="1330" y="807" width="120" height="26" rx="13" fill="#6B3FA0"/>
+  <text x="1390" y="825" font-size="13" text-anchor="middle" font-weight="700" fill="#FFFFFF">LLM はここだけ</text>
+  <text x="1190" y="854" font-size="12" fill="#39485A">Claude Haiku 4.5 で回答と引用</text>
+  <text x="44" y="908" font-size="12.5" fill="#5A6B7B">※ ベクトル検索（エンベディング）は使わない。入口・進む先・止めどきは、すべて Jev の 0〜1 スコアとしきい値で決まる。</text>
+</svg>
