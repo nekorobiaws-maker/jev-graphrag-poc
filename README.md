@@ -43,7 +43,7 @@
 
 ## 前提
 
-- AWSアカウント(既定は東京リージョンap-northeast-1。大阪ap-northeast-3でも同じ一式を置けます。「リージョン」を参照)と、IAMロール・DynamoDB・Lambda・SSM・API Gatewayを作れる権限
+- AWSアカウント(東京リージョンap-northeast-1を前提)と、IAMロール・DynamoDB・Lambda・SSM・API Gatewayを作れる権限
 - Amazon BedrockでClaude Haiku 4.5(推論プロファイル`global.anthropic.claude-haiku-4-5-20251001-v1:0`)のモデルアクセスが有効になっていること
 - Jev(TypeSafe AI)のAPIキー
 - Python 3.13以上(Lambdaのランタイムはpython3.13 / arm64)
@@ -95,12 +95,11 @@ python3 -m venv .venv                              # リポジトリ直下の .v
 
 npx aws-cdk@2 synth                                # テンプレートの確認だけ(AWS は呼ばない)
 ./.venv/bin/python check_parity.py --template cdk.out/JevGraphragPoc.template.json   # 設定の突き合わせ
-npx aws-cdk@2 bootstrap aws://$JEV_AWS_ACCOUNT_ID/ap-northeast-1   # アカウント・リージョンごとに最初の 1 回だけ
+npx aws-cdk@2 bootstrap aws://$JEV_AWS_ACCOUNT_ID/ap-northeast-1   # 最初の 1 回だけ
 npx aws-cdk@2 deploy                               # スタック JevGraphragPoc
 cd ../..
 ```
 
-- リージョンは`-c region=<リージョン>`か環境変数`JEV_REGION`で切り替えます(既定`ap-northeast-1`)。使えるリージョンとスタック名は「リージョン」を参照してください
 - アカウントは環境変数`JEV_AWS_ACCOUNT_ID`で指定します。認証情報のアカウントと違うと止まります。`synth`だけならダミーの12桁でも動きます
 - IAMロールの権限は`infra/iam/policy.json`と同じです(`check_parity.py`で突き合わせます)
 - `cdk bootstrap`は、CDKがデプロイに使うIAMロールやS3バケット(スタック`CDKToolkit`)を作ります。既定ではCloudFormationの実行ロールに`AdministratorAccess`が付くので、気になる場合は`--cloudformation-execution-policies`で絞ってください
@@ -132,7 +131,7 @@ CDKで作ったリソースも名前で見つけて表示します。ただしLa
 
 ### deploy.py だけで作る場合(旧手順)
 
-`infra/deploy.py`の`create-tables`・`deploy-lambdas`・`create-api`と、`infra/iam/`を使った手作業のIAMロールでも同じ構成を作れます。リソース名が同じなので、**CDKのスタックと同じアカウント・リージョンで混ぜて使わないでください**(名前がぶつかって作成に失敗するか、`teardown`がスタックの中身を外から消してしまいます)。
+`infra/deploy.py`の`create-tables`・`deploy-lambdas`・`create-api`と、`infra/iam/`を使った手作業のIAMロールでも同じ構成を作れます。リソース名が同じなので、**CDKのスタックと同じアカウントで混ぜて使わないでください**(名前がぶつかって作成に失敗するか、`teardown`がスタックの中身を外から消してしまいます)。
 
 ## 使い方
 
@@ -196,34 +195,6 @@ JEV_QUESTIONS=data/questions_test_v2.json ./.venv/bin/python scripts/30_run_eval
 
 このほかDynamoDB(オンデマンド)・Lambda・API Gateway・SSMの料金がかかります。スクリプトは実行前に見積もりを表示し、`results/cache/`に残した呼び出し記録の累計が$9を超えそうなら止まります(`lib/common.py`の`BUDGET_LIMIT_USD`)。
 
-## リージョン
-
-| リージョン | 置くもの | スタック名 | IAMロール名 |
-|---|---|---|---|
-| `ap-northeast-1`(東京。既定) | 一式(テーブル2本・Lambda 2つ・API Gateway) | `JevGraphragPoc` | `jev-graphrag-poc-lambda-role` |
-| `ap-northeast-3`(大阪) | 東京と同じ一式 | `JevGraphragPocApNortheast3` | `jev-graphrag-poc-lambda-role-ap-northeast-3` |
-| `us-west-2`(計測用) | query Lambdaとテーブルだけ | `JevGraphragPocUsWest2` | `jev-graphrag-poc-lambda-role-us-west-2` |
-
-- 切り替えはCDKなら`-c region=<リージョン>`、スクリプトなら環境変数`JEV_REGION`です(`scripts/`・`write_api_local.py`はどれも`JEV_REGION`のリージョンのLambda・テーブル・スタックを使います)
-- JevのAPIキー(SSM)は東京にだけ置きます。大阪・`us-west-2`のLambdaは環境変数`SECRET_REGION=ap-northeast-1`で東京のパラメータを読みます。先に東京で`deploy.py put-secret`を済ませてください
-- マスター投入(`60_put_master.py`)と登録(`20_invoke_ingest.py`)は東京と大阪で動きます。`us-west-2`では止まります(東京のデータを写して測る前提ですが、写すスクリプトは同梱していないので、テーブルは空で作られます)
-- `.api.local.json`は1つだけです。大阪で`write_api_local.py`を実行すると、検索画面の向き先が大阪のAPIに替わります
-- `infra/deploy.py`は東京と`us-west-2`用です。大阪では`status`(読むだけ)しか受け付けません。大阪のリソースは`cdk deploy`/`cdk destroy`で作って消してください。大阪の`status`ではAPI Gatewayは表示されず、IAMは東京のロール名を見ます
-
-大阪で一式を立てる例です。
-
-```bash
-export JEV_REGION=ap-northeast-3
-bash infra/build.sh
-cd infra/cdk
-npx aws-cdk@2 bootstrap aws://$JEV_AWS_ACCOUNT_ID/ap-northeast-3   # 大阪で最初の 1 回だけ
-npx aws-cdk@2 deploy -c region=ap-northeast-3                      # スタック JevGraphragPocApNortheast3
-cd ../..
-./.venv/bin/python infra/cdk/write_api_local.py                    # 大阪の API の URL とキー
-./.venv/bin/python scripts/60_put_master.py --file data/master_v3.json
-./.venv/bin/python scripts/20_invoke_ingest.py --reset
-```
-
 ## 後片付け
 
 ```bash
@@ -231,10 +202,8 @@ cd infra/cdk && npx aws-cdk@2 destroy && cd ../..   # スタックの中身(テ�
 ./.venv/bin/python infra/deploy.py teardown          # 残った SSM パラメータと .api.local.json を削除(yes で確認)
 ```
 
-- 大阪・`us-west-2`のスタックは`npx aws-cdk@2 destroy -c region=ap-northeast-3`・`-c region=us-west-2`で消します(`-c region`も環境変数`JEV_REGION`も無いと東京のスタックが対象になります)
-- `deploy.py teardown`は東京のSSMパラメータも消します。大阪のスタックだけを消すときは実行しないでください(SSMは東京と共用です)
 - `deploy.py teardown`は、必ず`cdk destroy`の**後**に実行してください(先に実行すると、スタックが管理しているリソースを外から消してしまいます)
-- `cdk bootstrap`で作ったスタック`CDKToolkit`は残ります。不要ならCloudFormationから削除してください(中のS3バケットは空にしてから)
+- `cdk bootstrap`で作ったスタック`CDKToolkit`は残ります。不要ならCloudFormationから削除してください(S3バケットはスタックを消しても残るので、空にしてから手動で削除)
 
 ## 注意
 
